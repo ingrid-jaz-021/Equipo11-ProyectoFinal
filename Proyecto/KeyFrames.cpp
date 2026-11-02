@@ -1,8 +1,3 @@
-//SkyBox
-//Rivera Rodriguez Hugo Abraham
-//Fecha de entrega: 29/10/2026
-//Número de cuenta: 320291623
-
 #include <iostream>
 #include <cmath>
 
