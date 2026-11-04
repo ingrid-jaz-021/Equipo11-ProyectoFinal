@@ -200,7 +200,7 @@ GLfloat lastFrame = 0.0f;
 int main()
 {
 	glfwInit();
-	GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "Rivera Rodriguez Hugo Abraham", nullptr, nullptr);
+	GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "Proyecto Chignahuapan", nullptr, nullptr);
 
 	if (nullptr == window)
 	{
