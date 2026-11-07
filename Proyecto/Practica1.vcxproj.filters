@@ -44,6 +44,9 @@
     <ClInclude Include="Texture2D.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="FloorUV.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="TreeVegetation.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="AlphaBillboards.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="CutoutImage.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="ZocaloBackdrop.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="MovementSettings.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="Camera.h">
       <Filter>Archivos de encabezado</Filter>
@@ -53,6 +56,13 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <None Include="images\Arbol_RGBA.png"><Filter>Archivos de recursos</Filter></None>
+    <None Include="images\Casa1.png"><Filter>Archivos de recursos</Filter></None>
+    <None Include="images\Casa2.png"><Filter>Archivos de recursos</Filter></None>
+    <None Include="images\Casa3.png"><Filter>Archivos de recursos</Filter></None>
+    <None Include="images\Iglesia.png"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Shader\billboard.vs"><Filter>Archivos de origen\Shader</Filter></None>
+    <None Include="Shader\billboard.frag"><Filter>Archivos de origen\Shader</Filter></None>
     <None Include="Models\niña zocalo.obj">
       <Filter>Archivos de recursos</Filter>
     </None>

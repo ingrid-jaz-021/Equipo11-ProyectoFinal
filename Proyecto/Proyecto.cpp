@@ -26,6 +26,7 @@
 #include "CharacterController.h"
 #include "ZocaloLighting.h"
 #include "TreeVegetation.h"
+#include "ZocaloBackdrop.h"
 
 namespace
 {
@@ -425,7 +426,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     {
         glfwSetWindowTitle(window, "Cargando EntornoCompleto.obj...");
         environment = std::make_unique<Model>("Models/EntornoCompleto/EntornoCompleto.obj",
-            keepLoading, ModelOptions{ &ground, false });
+            keepLoading, ModelOptions{ &ground, false, "TapeteAserrin1.002" });
         if (validate) ValidateSceneGrass(ground);
     }
     Model lamp("Models/Farola/Farola.obj", keepLoading);
@@ -434,8 +435,16 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     plazaLights.Upload(environmentShader);
     plazaLights.Upload(characterShader);
     std::cout << "Zocalo: 8 farolas, 8 focos alineados con su cristal." << std::endl;
+    std::unique_ptr<AlphaBillboards> billboards;
     std::unique_ptr<TreeVegetation> vegetation;
-    if (environment) vegetation = std::make_unique<TreeVegetation>(ground, SOURCE_SPAWN, ENVIRONMENT_SCALE);
+    std::unique_ptr<ZocaloBackdrop> backdrop;
+    if (environment)
+    {
+        billboards=std::make_unique<AlphaBillboards>();
+        vegetation=std::make_unique<TreeVegetation>(*billboards,ground,SOURCE_SPAWN,ENVIRONMENT_SCALE);
+        backdrop=std::make_unique<ZocaloBackdrop>(*billboards,*environment,ground,SOURCE_SPAWN,ENVIRONMENT_SCALE);
+        if(validate) billboards->ValidateAlpha();
+    }
     Skybox skybox;
     UpdateWindowTitle(window);
     firstMouse = true;
@@ -483,7 +492,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             if (frame == 130)
             {
                 const glm::vec3 center = (plazaLights.instances[0].base + plazaLights.instances[2].base) * 0.5f;
-                SetValidationCamera(center + glm::vec3(0, 1450, -20), center);
+                SetValidationCamera(center + glm::vec3(0, 2400, -20), center);
             }
             if (frame == 140)
             {
@@ -498,6 +507,26 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
                 const glm::vec3 center = ((min + max) * 0.5f - SOURCE_SPAWN) * ENVIRONMENT_SCALE;
                 SetValidationCamera(center + glm::vec3(160, 25, 160), center);
             }
+            if(frame==200)
+                SetValidationCamera(backdrop->Center()+glm::vec3(1300,1150,-1300),backdrop->Center());
+            if(frame==210||frame==220||frame==230)
+            {
+                const int side=frame==210?2:frame==220?1:0;
+                const glm::vec3 target=backdrop->SideTarget(side);
+                const auto center=backdrop->Center();
+                const auto direction=glm::normalize(glm::vec3(target.x-center.x,0,target.z-center.z));
+                const auto right=glm::cross(direction,glm::vec3(0,1,0));
+                SetValidationCamera(center+direction*150.0f+right*60.0f+glm::vec3(0,90,0),target);
+            }
+            if(frame==240)
+            {
+                const auto base=vegetation->Site(0);
+                SetValidationCamera(base+glm::vec3(0,35,-120),base+glm::vec3(0,35,0));
+            }
+            if(frame==250||frame==260)
+                SetValidationCamera(backdrop->PassageEye(frame==250),backdrop->PassageTarget());
+            if(frame==270)
+                SetValidationCamera(backdrop->Center()+glm::vec3(0,2600,-300),backdrop->Center()+glm::vec3(0,0,-200));
         }
         if (validate)
         {
@@ -546,7 +575,6 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             for (const auto& instance : plazaLights.instances)
                 DrawObject(lamp, environmentShader, instance.model, view, projection, false);
         }
-        if (vegetation) vegetation->Draw(environmentShader, view, projection);
         DrawObject(girl, characterShader, player.ModelMatrix(), view, projection, true);
         glDepthFunc(GL_LEQUAL);
         glDepthMask(GL_FALSE);
@@ -557,7 +585,9 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         skybox.Draw();
         glDepthMask(GL_TRUE);
         glDepthFunc(GL_LESS);
-        if (validate && (frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || frame == 160 || frame == 170 || frame == 180 || frame == 190))
+        // Cielo y opacos primero; planos RGBA al final, ordenados de lejos a cerca.
+        if(billboards) billboards->Draw(view,projection);
+        if (validate && (frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270))
         {
             std::vector<float> depth(static_cast<size_t>(width) * height);
             glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, depth.data());
@@ -567,7 +597,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         }
         if (frame == 0 || validate) CheckOpenGL("personaje, animacion, camaras y skybox");
         glfwSwapBuffers(window);
-        if (validate && ++frame >= (environment ? 200 : 140))
+        if (validate && ++frame >= (environment ? 280 : 140))
         {
             std::cout << "VALIDACION OK: animacion suave, luces, ambas camaras y " << frame
                 << " frames sin errores OpenGL." << std::endl;
