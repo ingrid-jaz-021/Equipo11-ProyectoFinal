@@ -1,259 +1,160 @@
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
+#include <filesystem>
 #include <iostream>
-#include <cmath>
-
-// GLEW
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <vector>
 #include <GL/glew.h>
-
-// GLFW
 #include <GLFW/glfw3.h>
-
-// Other Libs
-#include "stb_image.h"
-
-// GLM Mathematics
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-
-//Load Models
-#include "SOIL2/SOIL2.h"
-
-// Other includes
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+#undef STB_IMAGE_IMPLEMENTATION
 #include "Shader.h"
 #include "Camera.h"
 #include "Model.h"
 #include "Texture.h"
+#include "CharacterController.h"
+#include "ZocaloLighting.h"
+#include "TreeVegetation.h"
 
-// Function prototypes
-void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mode);
-void MouseCallback(GLFWwindow* window, double xPos, double yPos);
-void DoMovement();
-void Animation();
-
-// Window dimensions
-const GLuint WIDTH = 800, HEIGHT = 600;
-int SCREEN_WIDTH, SCREEN_HEIGHT;
-
-// Camera
-Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
-GLfloat lastX = WIDTH / 2.0;
-GLfloat lastY = HEIGHT / 2.0;
-bool keys[1024];
+namespace
+{
+constexpr int WIDTH = 1280, HEIGHT = 720;
+constexpr float ENVIRONMENT_SCALE = 10.0f;
+const glm::vec3 SOURCE_SPAWN(-114.0f, 2.005836f, 290.0f);
+const glm::vec3 ENVIRONMENT_TRANSLATION = -SOURCE_SPAWN * ENVIRONMENT_SCALE;
+Camera freeCamera(glm::vec3(30.0f, 30.0f, -60.0f), glm::vec3(0, 1, 0), 115.0f, -12.0f);
+CharacterController player;
+FollowCamera followCamera;
+enum class CameraMode { Free, ThirdPerson };
+CameraMode cameraMode = CameraMode::ThirdPerson;
 bool firstMouse = true;
-// Light attributes
-glm::vec3 lightPos(0.0f, 0.0f, 0.0f);
-bool active;
+double lastX = 0.0, lastY = 0.0;
 
-// Positions of the point lights
-glm::vec3 pointLightPositions[] = {
-	glm::vec3(0.0f,2.0f, 0.0f),
-	glm::vec3(0.0f,0.0f, 0.0f),
-	glm::vec3(0.0f,0.0f, 0.0f),
-	glm::vec3(0.0f,0.0f, 0.0f)
-};
-
-float vertices[] = {
-	-0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-	 0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-	 0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-	 0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-	-0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-	-0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-
-	-0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-	 0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-	 0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-	 0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-	-0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-	-0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-
-	-0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-	-0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-	-0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-	-0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-	-0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-	-0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-
-	 0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-	 0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-	 0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-	 0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-	 0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-	 0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-
-	-0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-	 0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-	 0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-	 0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-	-0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-	-0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-
-	-0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-	 0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-	 0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-	 0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-	-0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-	-0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
-};
-
-glm::vec3 Light1 = glm::vec3(0);
-
-//Anim
-float rotBall = 0.0f;
-float rotDog = 0.0f;
-int dogAnim = 0;
-float rotF_RightLeg = 0.0f;
-float rotF_LeftLeg = 0.0f;
-float rotB_RightLeg = 0.0f;
-float rotB_LeftLeg = 0.0f;
-float head = 0.0f;
-float tail = 0.0f;
-
-//KeyFrames
-float dogPosX = 0.0f, dogPosY = 0.0f, dogPosZ = 0.0f;
-
-#define MAX_FRAMES 50 // Ampliado para evitar que se corte el guardado
-int i_max_steps = 120; // A 60 FPS fijos, 120 steps = 2 segundos exactos por transicion
-int i_curr_steps = 0;
-
-typedef struct _frame {
-	float rotDog;
-	float rotDogInc;
-	float dogPosX;
-	float dogPosY;
-	float dogPosZ;
-	float incX;
-	float incY;
-	float incZ;
-	float head;
-	float headInc;
-	float tail;
-	float tailInc;
-	float rotF_RightLeg;
-	float rotF_RightLegInc;
-	float rotF_LeftLeg;
-	float rotF_LeftLegInc;
-	float rotB_RightLeg;
-	float rotB_RightLegInc;
-	float rotB_LeftLeg;
-	float rotB_LeftLegInc;
-} FRAME;
-
-FRAME KeyFrame[MAX_FRAMES];
-int FrameIndex = 0;
-bool play = false;
-int playIndex = 0;
-
-void saveFrame(void)
+void UpdateWindowTitle(GLFWwindow* window)
 {
-	printf("Guardando frameindex %d\n", FrameIndex);
-
-	KeyFrame[FrameIndex].dogPosX = dogPosX;
-	KeyFrame[FrameIndex].dogPosY = dogPosY;
-	KeyFrame[FrameIndex].dogPosZ = dogPosZ;
-	KeyFrame[FrameIndex].rotDog = rotDog;
-	KeyFrame[FrameIndex].head = head;
-	KeyFrame[FrameIndex].tail = tail;
-
-	KeyFrame[FrameIndex].rotF_RightLeg = rotF_RightLeg;
-	KeyFrame[FrameIndex].rotF_LeftLeg = rotF_LeftLeg;
-	KeyFrame[FrameIndex].rotB_RightLeg = rotB_RightLeg;
-	KeyFrame[FrameIndex].rotB_LeftLeg = rotB_LeftLeg;
-
-	FrameIndex++;
+    glfwSetWindowTitle(window, cameraMode == CameraMode::ThirdPerson
+        ? "Chignahuapan | Tercera persona | C: camara libre"
+        : "Chignahuapan | Camara libre | C: tercera persona");
 }
-
-void resetElements(void)
+void ResetScene()
 {
-	dogPosX = KeyFrame[0].dogPosX;
-	dogPosY = KeyFrame[0].dogPosY;
-	dogPosZ = KeyFrame[0].dogPosZ;
-	head = KeyFrame[0].head;
-	rotDog = KeyFrame[0].rotDog;
-	tail = KeyFrame[0].tail;
-
-	rotF_RightLeg = KeyFrame[0].rotF_RightLeg;
-	rotF_LeftLeg = KeyFrame[0].rotF_LeftLeg;
-	rotB_RightLeg = KeyFrame[0].rotB_RightLeg;
-	rotB_LeftLeg = KeyFrame[0].rotB_LeftLeg;
+    cameraMode = CameraMode::ThirdPerson;
+    player.SetFrozen(false);
+    player.Reset();
+    followCamera.Reset();
+    followCamera.Update(player, 0.0f, ENVIRONMENT_SCALE, true);
+    freeCamera = Camera(glm::vec3(30.0f, 30.0f, -60.0f), glm::vec3(0, 1, 0), 115.0f, -12.0f);
+    firstMouse = true;
 }
-
-void interpolation(void)
+bool SetResourceDirectory()
 {
-	KeyFrame[playIndex].incX = (KeyFrame[playIndex + 1].dogPosX - KeyFrame[playIndex].dogPosX) / i_max_steps;
-	KeyFrame[playIndex].incY = (KeyFrame[playIndex + 1].dogPosY - KeyFrame[playIndex].dogPosY) / i_max_steps;
-	KeyFrame[playIndex].incZ = (KeyFrame[playIndex + 1].dogPosZ - KeyFrame[playIndex].dogPosZ) / i_max_steps;
-	KeyFrame[playIndex].headInc = (KeyFrame[playIndex + 1].head - KeyFrame[playIndex].head) / i_max_steps;
-	KeyFrame[playIndex].rotDogInc = (KeyFrame[playIndex + 1].rotDog - KeyFrame[playIndex].rotDog) / i_max_steps;
-	KeyFrame[playIndex].tailInc = (KeyFrame[playIndex + 1].tail - KeyFrame[playIndex].tail) / i_max_steps;
-
-	KeyFrame[playIndex].rotF_RightLegInc = (KeyFrame[playIndex + 1].rotF_RightLeg - KeyFrame[playIndex].rotF_RightLeg) / i_max_steps;
-	KeyFrame[playIndex].rotF_LeftLegInc = (KeyFrame[playIndex + 1].rotF_LeftLeg - KeyFrame[playIndex].rotF_LeftLeg) / i_max_steps;
-	KeyFrame[playIndex].rotB_RightLegInc = (KeyFrame[playIndex + 1].rotB_RightLeg - KeyFrame[playIndex].rotB_RightLeg) / i_max_steps;
-	KeyFrame[playIndex].rotB_LeftLegInc = (KeyFrame[playIndex + 1].rotB_LeftLeg - KeyFrame[playIndex].rotB_LeftLeg) / i_max_steps;
+    namespace fs = std::filesystem;
+    wchar_t executablePath[32768]{};
+    const DWORD length = GetModuleFileNameW(nullptr, executablePath, 32768);
+    if (!length || length >= 32768) return false;
+    const fs::path executableDirectory = fs::path(executablePath).parent_path();
+    const std::vector<fs::path> candidates = {
+        fs::current_path(), fs::current_path() / "Proyecto", executableDirectory,
+        executableDirectory / "Proyecto", executableDirectory.parent_path() / "Proyecto",
+        executableDirectory.parent_path().parent_path() / "Proyecto"
+    };
+    for (const auto& candidate : candidates)
+        if (fs::exists(candidate / "Models/EntornoCompleto/EntornoCompleto.obj") &&
+            fs::exists(candidate / "Shader/character.vs"))
+        {
+            fs::current_path(candidate);
+            return true;
+        }
+    return false;
 }
-
-// Deltatime
-GLfloat deltaTime = 0.0f;
-GLfloat lastFrame = 0.0f;
-
-int main()
+void MouseCallback(GLFWwindow* window, double x, double y)
 {
-	glfwInit();
-	GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "Proyecto Chignahuapan", nullptr, nullptr);
-
-	if (nullptr == window)
-	{
-		std::cout << "Failed to create GLFW window" << std::endl;
-		glfwTerminate();
-		return EXIT_FAILURE;
-	}
-
-	glfwMakeContextCurrent(window);
-
-	glfwSwapInterval(1);
-
-	glfwGetFramebufferSize(window, &SCREEN_WIDTH, &SCREEN_HEIGHT);
-	glfwSetKeyCallback(window, KeyCallback);
-	glfwSetCursorPosCallback(window, MouseCallback);
-
-	glewExperimental = GL_TRUE;
-	if (GLEW_OK != glewInit())
-	{
-		std::cout << "Failed to initialize GLEW" << std::endl;
-		return EXIT_FAILURE;
-	}
-
-	glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-
-	Shader lightingShader("Shader/lighting.vs", "Shader/lighting.frag");
-	Shader lampShader("Shader/lamp.vs", "Shader/lamp.frag");
-	Shader skyboxshader("Shader/SkyBox.vs", "Shader/SkyBox.frag");
-
-	Model DogBody((char*)"Models/DogBody.obj");
-	Model HeadDog((char*)"Models/HeadDog.obj");
-	Model DogTail((char*)"Models/TailDog.obj");
-	Model F_RightLeg((char*)"Models/F_RightLegDog.obj");
-	Model F_LeftLeg((char*)"Models/F_LeftLegDog.obj");
-	Model B_RightLeg((char*)"Models/B_RightLegDog.obj");
-	Model B_LeftLeg((char*)"Models/B_LeftLegDog.obj");
-	Model Piso((char*)"Models/piso.obj");
-	Model Ball((char*)"Models/ball.obj");
-
-	// Inicializar KeyFrames en cero
-	for (int i = 0; i < MAX_FRAMES; i++) {
-		KeyFrame[i].dogPosX = 0; KeyFrame[i].dogPosY = 0; KeyFrame[i].dogPosZ = 0;
-		KeyFrame[i].incX = 0; KeyFrame[i].incY = 0; KeyFrame[i].incZ = 0;
-		KeyFrame[i].rotDog = 0; KeyFrame[i].rotDogInc = 0;
-		KeyFrame[i].head = 0; KeyFrame[i].headInc = 0;
-		KeyFrame[i].tail = 0; KeyFrame[i].tailInc = 0;
-		KeyFrame[i].rotF_RightLeg = 0; KeyFrame[i].rotF_RightLegInc = 0;
-		KeyFrame[i].rotF_LeftLeg = 0; KeyFrame[i].rotF_LeftLegInc = 0;
-		KeyFrame[i].rotB_RightLeg = 0; KeyFrame[i].rotB_RightLegInc = 0;
-		KeyFrame[i].rotB_LeftLeg = 0; KeyFrame[i].rotB_LeftLegInc = 0;
-	}
-
-	GLfloat skyboxVertices[] = {
+    if (glfwGetInputMode(window, GLFW_CURSOR) != GLFW_CURSOR_DISABLED) return;
+    if (firstMouse) { lastX = x; lastY = y; firstMouse = false; }
+    const float dx = static_cast<float>(x - lastX), dy = static_cast<float>(lastY - y);
+    if (cameraMode == CameraMode::Free) freeCamera.ProcessMouseMovement(dx, dy);
+    else followCamera.Mouse(dx, dy);
+    lastX = x; lastY = y;
+}
+void KeyCallback(GLFWwindow* window, int key, int, int action, int)
+{
+    if (action != GLFW_PRESS) return;
+    if (key == GLFW_KEY_ESCAPE) glfwSetWindowShouldClose(window, GLFW_TRUE);
+    if (key == GLFW_KEY_C)
+    {
+        cameraMode = cameraMode == CameraMode::ThirdPerson ? CameraMode::Free : CameraMode::ThirdPerson;
+        player.SetFrozen(cameraMode == CameraMode::Free);
+        followCamera.Update(player, 0.0f, ENVIRONMENT_SCALE, true);
+        firstMouse = true;
+        UpdateWindowTitle(window);
+    }
+    if (key == GLFW_KEY_TAB)
+    {
+        const int mode = glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED
+            ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED;
+        glfwSetInputMode(window, GLFW_CURSOR, mode);
+        firstMouse = true;
+    }
+    if (key == GLFW_KEY_R)
+    {
+        if (cameraMode == CameraMode::Free) freeCamera = Camera(glm::vec3(30,30,-60), glm::vec3(0,1,0),115,-12);
+        else ResetScene();
+    }
+}
+void ApplyMovement(glm::vec2 input, bool sprint, float vertical, float dt)
+{
+    if (cameraMode == CameraMode::Free)
+    {
+        // Exclusividad estricta: no se actualiza movimiento, pose ni reloj de la niÃ±a.
+        freeCamera.SetMovementSpeed(ENVIRONMENT_SCALE * (sprint ? 12.0f : 5.0f));
+        if (input.y > 0) freeCamera.ProcessFlyKeyboard(FORWARD, dt);
+        if (input.y < 0) freeCamera.ProcessFlyKeyboard(BACKWARD, dt);
+        if (input.x < 0) freeCamera.ProcessFlyKeyboard(LEFT, dt);
+        if (input.x > 0) freeCamera.ProcessFlyKeyboard(RIGHT, dt);
+        if (vertical != 0) freeCamera.ProcessVertical(vertical, dt);
+        return;
+    }
+    player.Update(input, followCamera.Forward(), sprint, dt, ENVIRONMENT_SCALE);
+}
+void DoMovement(GLFWwindow* window, float dt)
+{
+    const auto down = [window](int key) {
+        return glfwGetWindowAttrib(window, GLFW_FOCUSED) && glfwGetKey(window, key) == GLFW_PRESS;
+    };
+    const glm::vec2 input(static_cast<float>(down(GLFW_KEY_D) - down(GLFW_KEY_A)),
+        static_cast<float>(down(GLFW_KEY_W) - down(GLFW_KEY_S)));
+    ApplyMovement(input, down(GLFW_KEY_LEFT_SHIFT),
+        static_cast<float>(down(GLFW_KEY_E) - down(GLFW_KEY_Q)), dt);
+}
+void CheckOpenGL(const char* stage)
+{
+    const GLenum error = glGetError();
+    if (error != GL_NO_ERROR)
+        throw std::runtime_error(std::string("Error OpenGL en ") + stage + ": " + std::to_string(error));
+}
+class Skybox
+{
+public:
+    Skybox()
+    {
+        const std::vector<const GLchar*> faces = {
+            "SkyBox/galaxy+X.tga", "SkyBox/galaxy-X.tga",
+            "SkyBox/galaxy+Y.tga", "SkyBox/galaxy-Y.tga",
+            "SkyBox/galaxy+Z.tga", "SkyBox/galaxy-Z.tga"
+        };
+        cubemap = TextureLoading::LoadCubemap(faces);
+        const GLfloat vertices[] = {
 		// Positions
 		-1.0f,  1.0f, -1.0f,
 		-1.0f, -1.0f, -1.0f,
@@ -296,412 +197,324 @@ int main()
 		1.0f, -1.0f, -1.0f,
 		-1.0f, -1.0f,  1.0f,
 		1.0f, -1.0f,  1.0f
-	};
+        };
+        glGenVertexArrays(1, &VAO);
+        glGenBuffers(1, &VBO);
+        glBindVertexArray(VAO);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), nullptr);
+        glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
+    ~Skybox()
+    {
+        glDeleteTextures(1, &cubemap);
+        glDeleteBuffers(1, &VBO);
+        glDeleteVertexArrays(1, &VAO);
+    }
+    Skybox(const Skybox&) = delete;
+    Skybox& operator=(const Skybox&) = delete;
+    void Draw() const
+    {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap);
+        glBindVertexArray(VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glBindVertexArray(0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    }
+private:
+    GLuint VAO = 0, VBO = 0, cubemap = 0;
+};
 
-
-	GLuint indices[] =
-	{  // Note that we start from 0!
-		0,1,2,3,
-		4,5,6,7,
-		8,9,10,11,
-		12,13,14,15,
-		16,17,18,19,
-		20,21,22,23,
-		24,25,26,27,
-		28,29,30,31,
-		32,33,34,35
-	};
-
-
-
-	GLuint VBO, VAO, EBO;
-	glGenVertexArrays(1, &VAO);
-	glGenBuffers(1, &VBO);
-	glGenBuffers(1, &EBO);
-
-	glBindVertexArray(VAO);
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (GLvoid*)0);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
-	glEnableVertexAttribArray(1);
-
-	lightingShader.Use();
-	glUniform1i(glGetUniformLocation(lightingShader.Program, "Material.difuse"), 0);
-	glUniform1i(glGetUniformLocation(lightingShader.Program, "Material.specular"), 1);
-
-	//Skybox
-	GLuint skyboxVBO, skyboxVAO;
-	glGenVertexArrays(1, &skyboxVAO);
-	glGenBuffers(1, &skyboxVBO);
-	glBindVertexArray(skyboxVAO); 
-	glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
-
-//Load Textures
-	vector<const GLchar*> faces;
-	faces.push_back("SkyBox/galaxy+X.tga"); // GL_TEXTURE_CUBE_MAP_POSITIVE_X (Derecha)
-	faces.push_back("SkyBox/galaxy-X.tga"); // GL_TEXTURE_CUBE_MAP_NEGATIVE_X (Izquierda)
-	faces.push_back("SkyBox/galaxy+Y.tga"); // GL_TEXTURE_CUBE_MAP_POSITIVE_Y (Arriba)
-	faces.push_back("SkyBox/galaxy-Y.tga"); // GL_TEXTURE_CUBE_MAP_NEGATIVE_Y (Abajo)
-	faces.push_back("SkyBox/galaxy+Z.tga"); // GL_TEXTURE_CUBE_MAP_POSITIVE_Z (Atrás)
-	faces.push_back("SkyBox/galaxy-Z.tga"); // GL_TEXTURE_CUBE_MAP_NEGATIVE_Z (Frente)
-
-	GLuint cubemapTexture = TextureLoading::LoadCubemap(faces);
-
-
-	glm::mat4 projection = glm::perspective(camera.GetZoom(), (GLfloat)SCREEN_WIDTH / (GLfloat)SCREEN_HEIGHT, 0.1f, 100.0f);
-
-	// Game loop
-	while (!glfwWindowShouldClose(window))
-	{
-		GLfloat currentFrame = glfwGetTime();
-		deltaTime = currentFrame - lastFrame;
-		lastFrame = currentFrame;
-
-		glfwPollEvents();
-		DoMovement();
-		Animation();
-
-		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		glEnable(GL_DEPTH_TEST);
-
-		glm::mat4 modelTemp = glm::mat4(1.0f);
-
-		lightingShader.Use();
-		glUniform1i(glGetUniformLocation(lightingShader.Program, "diffuse"), 0);
-		GLint viewPosLoc = glGetUniformLocation(lightingShader.Program, "viewPos");
-		glUniform3f(viewPosLoc, camera.GetPosition().x, camera.GetPosition().y, camera.GetPosition().z);
-
-		glUniform3f(glGetUniformLocation(lightingShader.Program, "dirLight.direction"), -0.2f, -1.0f, -0.3f);
-		glUniform3f(glGetUniformLocation(lightingShader.Program, "dirLight.ambient"), 0.6f, 0.6f, 0.6f);
-		glUniform3f(glGetUniformLocation(lightingShader.Program, "dirLight.diffuse"), 0.6f, 0.6f, 0.6f);
-		glUniform3f(glGetUniformLocation(lightingShader.Program, "dirLight.specular"), 0.3f, 0.3f, 0.3f);
-
-		glm::vec3 lightColor;
-		lightColor.x = abs(sin(glfwGetTime() * Light1.x));
-		lightColor.y = abs(sin(glfwGetTime() * Light1.y));
-		lightColor.z = sin(glfwGetTime() * Light1.z);
-
-		glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[0].position"), pointLightPositions[0].x, pointLightPositions[0].y, pointLightPositions[0].z);
-		glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[0].ambient"), lightColor.x, lightColor.y, lightColor.z);
-		glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[0].diffuse"), lightColor.x, lightColor.y, lightColor.z);
-		glUniform3f(glGetUniformLocation(lightingShader.Program, "pointLights[0].specular"), 1.0f, 0.2f, 0.2f);
-		glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[0].constant"), 1.0f);
-		glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[0].linear"), 0.045f);
-		glUniform1f(glGetUniformLocation(lightingShader.Program, "pointLights[0].quadratic"), 0.075f);
-
-		glUniform3f(glGetUniformLocation(lightingShader.Program, "spotLight.position"), camera.GetPosition().x, camera.GetPosition().y, camera.GetPosition().z);
-		glUniform3f(glGetUniformLocation(lightingShader.Program, "spotLight.direction"), camera.GetFront().x, camera.GetFront().y, camera.GetFront().z);
-		glUniform3f(glGetUniformLocation(lightingShader.Program, "spotLight.ambient"), 0.2f, 0.2f, 0.8f);
-		glUniform3f(glGetUniformLocation(lightingShader.Program, "spotLight.diffuse"), 0.2f, 0.2f, 0.8f);
-		glUniform3f(glGetUniformLocation(lightingShader.Program, "spotLight.specular"), 0.0f, 0.0f, 0.0f);
-		glUniform1f(glGetUniformLocation(lightingShader.Program, "spotLight.constant"), 1.0f);
-		glUniform1f(glGetUniformLocation(lightingShader.Program, "spotLight.linear"), 0.3f);
-		glUniform1f(glGetUniformLocation(lightingShader.Program, "spotLight.quadratic"), 0.7f);
-		glUniform1f(glGetUniformLocation(lightingShader.Program, "spotLight.cutOff"), glm::cos(glm::radians(12.0f)));
-		glUniform1f(glGetUniformLocation(lightingShader.Program, "spotLight.outerCutOff"), glm::cos(glm::radians(18.0f)));
-
-		glUniform1f(glGetUniformLocation(lightingShader.Program, "material.shininess"), 5.0f);
-
-		glm::mat4 view = camera.GetViewMatrix();
-		GLint modelLoc = glGetUniformLocation(lightingShader.Program, "model");
-		GLint viewLoc = glGetUniformLocation(lightingShader.Program, "view");
-		GLint projLoc = glGetUniformLocation(lightingShader.Program, "projection");
-
-		glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-		glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
-
-		glm::mat4 model(1);
-
-		// Piso
-		view = camera.GetViewMatrix();
-		model = glm::mat4(1);
-		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-		Piso.Draw(lightingShader);
-
-		glUniform1i(glGetUniformLocation(lightingShader.Program, "transparency"), 0);
-
-		// Body
-		modelTemp = model = glm::mat4(1);
-		modelTemp = model = glm::translate(model, glm::vec3(dogPosX, dogPosY, dogPosZ));
-		modelTemp = model = glm::rotate(model, glm::radians(rotDog), glm::vec3(0.0f, 1.0f, 0.0f));
-		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-		DogBody.Draw(lightingShader);
-
-		// Head
-		model = modelTemp;
-		model = glm::translate(model, glm::vec3(0.0f, 0.093f, 0.208f));
-		model = glm::rotate(model, glm::radians(head), glm::vec3(0.0f, 0.0f, 1.0f));
-		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-		HeadDog.Draw(lightingShader);
-
-		// Tail 
-		model = modelTemp;
-		model = glm::translate(model, glm::vec3(0.0f, 0.026f, -0.288f));
-		model = glm::rotate(model, glm::radians(tail), glm::vec3(0.0f, 0.0f, -1.0f));
-		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-		DogTail.Draw(lightingShader);
-
-		// EL FIX DE DIBUJO ESTÁ AQUÍ: Reemplazo de variables FLegs/RLegs por las específicas
-		// Front Left Leg
-		model = modelTemp;
-		model = glm::translate(model, glm::vec3(0.112f, -0.044f, 0.074f));
-		model = glm::rotate(model, glm::radians(rotF_LeftLeg), glm::vec3(-1.0f, 0.0f, 0.0f));
-		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-		F_LeftLeg.Draw(lightingShader);
-
-		// Front Right Leg
-		model = modelTemp;
-		model = glm::translate(model, glm::vec3(-0.111f, -0.055f, 0.074f));
-		model = glm::rotate(model, glm::radians(rotF_RightLeg), glm::vec3(1.0f, 0.0f, 0.0f));
-		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-		F_RightLeg.Draw(lightingShader);
-
-		// Back Left Leg
-		model = modelTemp;
-		model = glm::translate(model, glm::vec3(0.082f, -0.046, -0.218));
-		model = glm::rotate(model, glm::radians(rotB_LeftLeg), glm::vec3(1.0f, 0.0f, 0.0f));
-		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-		B_LeftLeg.Draw(lightingShader);
-
-		// Back Right Leg
-		model = modelTemp;
-		model = glm::translate(model, glm::vec3(-0.083f, -0.057f, -0.231f));
-		model = glm::rotate(model, glm::radians(rotB_RightLeg), glm::vec3(-1.0f, 0.0f, 0.0f));
-		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-		B_RightLeg.Draw(lightingShader);
-
-		// Ball
-		model = glm::mat4(1);
-		glEnable(GL_BLEND);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-		glUniform1i(glGetUniformLocation(lightingShader.Program, "transparency"), 1);
-		model = glm::rotate(model, glm::radians(rotBall), glm::vec3(0.0f, 1.0f, 0.0f));
-		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-		Ball.Draw(lightingShader);
-		glDisable(GL_BLEND);
-		glBindVertexArray(0);
-
-		// Lámparas
-		lampShader.Use();
-		modelLoc = glGetUniformLocation(lampShader.Program, "model");
-		viewLoc = glGetUniformLocation(lampShader.Program, "view");
-		projLoc = glGetUniformLocation(lampShader.Program, "projection");
-
-		glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-		glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
-		model = glm::mat4(1);
-		model = glm::translate(model, lightPos);
-		model = glm::scale(model, glm::vec3(0.2f));
-		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-
-		model = glm::mat4(1);
-		model = glm::translate(model, pointLightPositions[0]);
-		model = glm::scale(model, glm::vec3(0.2f));
-		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-		glBindVertexArray(VAO);
-		glDrawArrays(GL_TRIANGLES, 0, 36);
-		glBindVertexArray(0);
-
-		//Draw skybox
-		glDepthFunc(GL_LEQUAL);
-		skyboxshader.Use();
-		view = glm::mat4(glm::mat3(camera.GetViewMatrix()));
-		glUniformMatrix4fv(glGetUniformLocation(skyboxshader.Program, "view"), 1, GL_FALSE, glm::value_ptr(view));
-		glUniformMatrix4fv(glGetUniformLocation(skyboxshader.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-
-		glBindVertexArray(skyboxVAO);
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
-		glDrawArrays(GL_TRIANGLES, 0, 36);
-		glBindVertexArray(0);
-		glDepthFunc(GL_LESS);
-
-
-		glfwSwapBuffers(window);
-	}
-
-	glDeleteVertexArrays(1, &VAO);
-	glDeleteBuffers(1, &VAO);
-	glDeleteBuffers(1, &EBO);
-	glDeleteVertexArrays(1, &skyboxVAO);
-	glDeleteBuffers(1, &skyboxVAO);
-
-	glfwTerminate();
-	return 0;
-}
-
-void DoMovement()
+void ValidateControls()
 {
-	if (keys[GLFW_KEY_W] || keys[GLFW_KEY_UP]) camera.ProcessKeyboard(FORWARD, deltaTime);
-	if (keys[GLFW_KEY_S] || keys[GLFW_KEY_DOWN]) camera.ProcessKeyboard(BACKWARD, deltaTime);
-	if (keys[GLFW_KEY_A] || keys[GLFW_KEY_LEFT]) camera.ProcessKeyboard(LEFT, deltaTime);
-	if (keys[GLFW_KEY_D] || keys[GLFW_KEY_RIGHT]) camera.ProcessKeyboard(RIGHT, deltaTime);
-
-	// SEGUNDO FIX: Rotación suave vinculada a deltaTime (aprox 100 grados por segundo de pose manual)
-	float rotSpeed = 100.0f * deltaTime;
-	float moveSpeed = 1.0f * deltaTime;
-
-	// Dog Controls
-	if (keys[GLFW_KEY_4]) head += rotSpeed;
-	if (keys[GLFW_KEY_5]) head -= rotSpeed;
-	if (keys[GLFW_KEY_2]) rotDog += rotSpeed;
-	if (keys[GLFW_KEY_3]) rotDog -= rotSpeed;
-
-	if (keys[GLFW_KEY_H]) dogPosZ += moveSpeed;
-	if (keys[GLFW_KEY_Y]) dogPosZ -= moveSpeed;
-	if (keys[GLFW_KEY_G]) dogPosX -= moveSpeed;
-	if (keys[GLFW_KEY_J]) dogPosX += moveSpeed;
-
-	// Y position for sitting down
-	if (keys[GLFW_KEY_I]) dogPosY += moveSpeed;
-	if (keys[GLFW_KEY_O]) dogPosY -= moveSpeed;
-
-	// Tail Controls
-	if (keys[GLFW_KEY_6]) tail += rotSpeed;
-	if (keys[GLFW_KEY_7]) tail -= rotSpeed;
-
-	// Front Legs Controls
-	if (keys[GLFW_KEY_Z]) rotF_RightLeg += rotSpeed;
-	if (keys[GLFW_KEY_X]) rotF_RightLeg -= rotSpeed;
-	if (keys[GLFW_KEY_C]) rotF_LeftLeg += rotSpeed;
-	if (keys[GLFW_KEY_V]) rotF_LeftLeg -= rotSpeed;
-
-	// Back Legs Controls
-	if (keys[GLFW_KEY_B]) rotB_RightLeg += rotSpeed;
-	if (keys[GLFW_KEY_N]) rotB_RightLeg -= rotSpeed;
-	if (keys[GLFW_KEY_M]) rotB_LeftLeg += rotSpeed;
-	if (keys[GLFW_KEY_P]) rotB_LeftLeg -= rotSpeed;
-
-	// Point Light
-	if (keys[GLFW_KEY_T]) pointLightPositions[0].x += moveSpeed;
-	if (keys[GLFW_KEY_G]) pointLightPositions[0].x -= moveSpeed;
-	if (keys[GLFW_KEY_Y]) pointLightPositions[0].y += moveSpeed;
-	if (keys[GLFW_KEY_H]) pointLightPositions[0].y -= moveSpeed;
-	if (keys[GLFW_KEY_U]) pointLightPositions[0].z -= moveSpeed;
-	if (keys[GLFW_KEY_J]) pointLightPositions[0].z += moveSpeed;
+    const auto require = [](bool condition, const char* message) {
+        if (!condition) throw std::runtime_error(message);
+    };
+    CharacterController a, b, diagonal;
+    for (int i=0;i<30;++i) a.Update({0,1},{0,0,1},false,1.0f/30,ENVIRONMENT_SCALE);
+    for (int i=0;i<144;++i) b.Update({0,1},{0,0,1},false,1.0f/144,ENVIRONMENT_SCALE);
+    for (int i=0;i<30;++i) diagonal.Update({1,1},{0,0,1},false,1.0f/30,ENVIRONMENT_SCALE);
+    require(glm::length(a.position-b.position)<0.002f,"Movimiento dependiente de FPS.");
+    require(std::abs(glm::length(a.position)-glm::length(diagonal.position))<0.002f,"Diagonal acelerada.");
+    for(int i=0;i<120;++i) a.Update({0,0},{0,0,1},false,1.0f/60,ENVIRONMENT_SCALE);
+    require(glm::length(a.velocity)<0.001f&&a.gait<0.001f,"El personaje no frena.");
+    b.SetFrozen(true);
+    const glm::vec3 position=b.position,velocity=b.velocity;
+    const float phase=b.phase,gait=b.gait;
+    for(int i=0;i<120;++i) b.Update({1,1},{1,0,0},true,1.0f/60,ENVIRONMENT_SCALE);
+    require(glm::length(b.position-position)==0&&glm::length(b.velocity-velocity)==0&&
+        b.phase==phase&&b.gait==gait,"El personaje cambia mientras la camara esta libre.");
+    const glm::vec2 tile=ZocaloTileSize("Material.006");
+    const auto u=ProjectFloorUV({0,0,0},{0,1,0},tile);
+    const auto v=ProjectFloorUV({tile.x,0,0},{0,1,0},tile);
+    require(std::abs(v.x-u.x-1.0f)<0.00001f,"Escala UV de piso incorrecta.");
+    std::cout<<"Controles OK: FPS, diagonales, bloqueo del personaje y escala UV."<<std::endl;
 }
-
-void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mode)
+void ValidateFrozenCharacter(GLFWwindow* window)
 {
-	// Evitar frames múltiples garantizando que solo guarde si GLFW_PRESS ocurre 1 vez
-	if (key == GLFW_KEY_K && action == GLFW_PRESS)
-	{
-		if (FrameIndex < MAX_FRAMES) {
-			saveFrame();
-		}
-		else {
-			printf("¡Limite de frames alcanzado!\n");
-		}
-	}
-
-	if (key == GLFW_KEY_L && action == GLFW_PRESS)
-	{
-		if (play == false && (FrameIndex > 1))
-		{
-			resetElements();
-			interpolation();
-			play = true;
-			playIndex = 0;
-			i_curr_steps = 0;
-		}
-		else
-		{
-			play = false;
-		}
-	}
-
-	if (GLFW_KEY_ESCAPE == key && GLFW_PRESS == action)
-	{
-		glfwSetWindowShouldClose(window, GL_TRUE);
-	}
-
-	if (key >= 0 && key < 1024)
-	{
-		if (action == GLFW_PRESS)
-		{
-			keys[key] = true;
-		}
-		else if (action == GLFW_RELEASE)
-		{
-			keys[key] = false;
-		}
-	}
-
-	if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
-	{
-		active = !active;
-		if (active) {
-			Light1 = glm::vec3(0.2f, 0.8f, 1.0f);
-		}
-		else {
-			Light1 = glm::vec3(0);
-		}
-	}
+    for(int i=0;i<40;++i) player.Update({0,1},{0,0,1},false,1.0f/60,ENVIRONMENT_SCALE);
+    KeyCallback(window,GLFW_KEY_C,0,GLFW_PRESS,0);
+    const auto pose=player.Pose();
+    const auto position=player.position;
+    const float phase=player.phase;
+    const auto eye=freeCamera.GetPosition();
+    for(int i=0;i<60;++i) ApplyMovement({1,1},true,0.5f,1.0f/60);
+    if(glm::length(player.position-position)!=0.0f || player.phase!=phase ||
+        pose.size()!=player.Pose().size() || std::memcmp(pose.data(),player.Pose().data(),pose.size()*sizeof(glm::mat4))!=0 ||
+        glm::length(freeCamera.GetPosition()-eye)<1.0f)
+        throw std::runtime_error("La camara libre altera el personaje o no responde a WASD.");
+    KeyCallback(window,GLFW_KEY_C,0,GLFW_PRESS,0);
+    ResetScene();
+    std::cout<<"Pausa real de huesos OK: C congela pose y posicion; WASD mueve solo la camara."<<std::endl;
 }
-
-void Animation() {
-	if (play)
-	{
-		if (i_curr_steps >= i_max_steps)
-		{
-			playIndex++;
-			if (playIndex > FrameIndex - 2)
-			{
-				printf("termina anim\n");
-				playIndex = 0;
-				play = false;
-			}
-			else
-			{
-				i_curr_steps = 0;
-				interpolation();
-			}
-		}
-		else
-		{
-			dogPosX += KeyFrame[playIndex].incX;
-			dogPosY += KeyFrame[playIndex].incY;
-			dogPosZ += KeyFrame[playIndex].incZ;
-			head += KeyFrame[playIndex].headInc;
-			rotDog += KeyFrame[playIndex].rotDogInc;
-			tail += KeyFrame[playIndex].tailInc;
-
-			rotF_RightLeg += KeyFrame[playIndex].rotF_RightLegInc;
-			rotF_LeftLeg += KeyFrame[playIndex].rotF_LeftLegInc;
-			rotB_RightLeg += KeyFrame[playIndex].rotB_RightLegInc;
-			rotB_LeftLeg += KeyFrame[playIndex].rotB_LeftLegInc;
-
-			i_curr_steps++;
-		}
-	}
-}
-
-void MouseCallback(GLFWwindow* window, double xPos, double yPos)
+void SaveFramebuffer(const std::string& path, int width, int height)
 {
-	if (firstMouse)
-	{
-		lastX = xPos;
-		lastY = yPos;
-		firstMouse = false;
-	}
+    std::vector<unsigned char> pixels(static_cast<size_t>(width) * height * 3);
+    GLint alignment;
+    glGetIntegerv(GL_PACK_ALIGNMENT, &alignment);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, pixels.data());
+    glPixelStorei(GL_PACK_ALIGNMENT, alignment);
+    FILE* file = OpenUtf8File(path.c_str(), L"wb");
+    if (!file) throw std::runtime_error("No se pudo guardar la captura: " + path);
+    unsigned char header[18]{};
+    header[2] = 2; header[12] = width & 255; header[13] = (width >> 8) & 255;
+    header[14] = height & 255; header[15] = (height >> 8) & 255; header[16] = 24;
+    const bool success = std::fwrite(header, 1, 18, file) == 18 &&
+        std::fwrite(pixels.data(), 1, pixels.size(), file) == pixels.size();
+    std::fclose(file);
+    if (!success) throw std::runtime_error("Captura incompleta.");
+}
+void SetLighting(const Shader& shader)
+{
+    shader.Use();
+    glUniform1i(glGetUniformLocation(shader.Program, "texture_diffuse1"), 0);
+    glUniform3f(glGetUniformLocation(shader.Program, "lightDirection"), -0.2f, -1.0f, -0.3f);
+    glUniform3f(glGetUniformLocation(shader.Program, "ambientLight"), 0.38f, 0.40f, 0.45f);
+    glUniform3f(glGetUniformLocation(shader.Program, "diffuseLight"), 0.26f, 0.25f, 0.24f);
+}
+void SetValidationCamera(const glm::vec3& eye, const glm::vec3& target)
+{
+    const glm::vec3 direction = glm::normalize(target - eye);
+    freeCamera = Camera(eye, glm::vec3(0, 1, 0),
+        glm::degrees(std::atan2(direction.z, direction.x)), glm::degrees(std::asin(direction.y)));
+    cameraMode = CameraMode::Free;
+}
+void DrawObject(const Model& object, const Shader& shader, const glm::mat4& model,
+    const glm::mat4& view, const glm::mat4& projection, bool character)
+{
+    shader.Use();
+    const glm::mat3 normal = glm::transpose(glm::inverse(glm::mat3(model)));
+    glUniformMatrix4fv(glGetUniformLocation(shader.Program, "model"), 1, GL_FALSE, glm::value_ptr(model));
+    glUniformMatrix3fv(glGetUniformLocation(shader.Program, "normalMatrix"), 1, GL_FALSE, glm::value_ptr(normal));
+    glUniformMatrix4fv(glGetUniformLocation(shader.Program, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(shader.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    if (character)
+    {
+        const auto& bones = player.Pose();
+        glUniformMatrix4fv(glGetUniformLocation(shader.Program, "bones[0]"), static_cast<GLsizei>(bones.size()),
+            GL_FALSE, glm::value_ptr(bones[0]));
+    }
+    object.Draw(shader, projection * view * model, !character);
+}
+void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::string& capture)
+{
+    if (validate) ValidateControls();
+    Shader environmentShader("Shader/modelLoading.vs", "Shader/modelLoading.frag");
+    Shader characterShader("Shader/character.vs", "Shader/modelLoading.frag");
+    Shader skyboxShader("Shader/SkyBox.vs", "Shader/SkyBox.frag");
+    SetLighting(environmentShader);
+    SetLighting(characterShader);
+    const auto keepLoading = [window]() {
+        glfwPollEvents();
+        glClearColor(0.05f, 0.05f, 0.08f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glfwSwapBuffers(window);
+        return glfwWindowShouldClose(window) == GLFW_FALSE;
+    };
+    // El modelo y los materiales con Ã± se leen como UTF-8, incluso con Assimp antiguo.
+    glfwSetWindowTitle(window, "Cargando personaje...");
+    Model girl("Models/NinaRig/NinaRig.fbx", keepLoading, { nullptr, true });
+    player.Attach(girl.Animator());
+    player.Configure(girl.GetMinBounds(), girl.GetMaxBounds(), 1.35f * ENVIRONMENT_SCALE);
+    ResetScene();
+    if (validate) ValidateFrozenCharacter(window);
+    GroundSurface ground;
+    std::unique_ptr<Model> environment;
+    if (!characterOnly)
+    {
+        glfwSetWindowTitle(window, "Cargando EntornoCompleto.obj...");
+        environment = std::make_unique<Model>("Models/EntornoCompleto/EntornoCompleto.obj",
+            keepLoading, ModelOptions{ &ground, false });
+    }
+    Model lamp("Models/Farola/Farola.obj", keepLoading);
+    ZocaloLighting plazaLights;
+    plazaLights.Build(lamp, environment.get(), ground, SOURCE_SPAWN, ENVIRONMENT_SCALE);
+    plazaLights.Upload(environmentShader);
+    plazaLights.Upload(characterShader);
+    std::cout << "Zocalo: 8 farolas, 8 focos alineados con su cristal." << std::endl;
+    std::unique_ptr<TreeVegetation> vegetation;
+    if (environment) vegetation = std::make_unique<TreeVegetation>(ground, SOURCE_SPAWN, ENVIRONMENT_SCALE);
+    Skybox skybox;
+    UpdateWindowTitle(window);
+    firstMouse = true;
+    if (!validate) glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    skyboxShader.Use();
+    glUniform1i(glGetUniformLocation(skyboxShader.Program, "skybox"), 0);
+    const GLint skyView = glGetUniformLocation(skyboxShader.Program, "view");
+    const GLint skyProjection = glGetUniformLocation(skyboxShader.Program, "projection");
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    CheckOpenGL("carga de modelos, rig y cubemap");
+    const float sceneDiagonal = environment
+        ? glm::length(environment->GetMaxBounds() - environment->GetMinBounds()) * ENVIRONMENT_SCALE : 1000.0f;
+    std::cout << "WASD: personaje | Shift: correr | C: cambiar camara | R: reiniciar\n"
+        << "Camara libre: WASD + E/Q (personaje congelado) | Raton: mirar | Rueda: zoom\n"
+        << "Tab: cursor | Esc: salir" << std::endl;
 
-	GLfloat xOffset = xPos - lastX;
-	GLfloat yOffset = lastY - yPos;
+    double previous = glfwGetTime();
+    int frame = 0;
+    while (!glfwWindowShouldClose(window))
+    {
+        const double now = glfwGetTime();
+        const float dt = validate ? 1.0f / 60.0f : std::min(static_cast<float>(now - previous), 0.1f);
+        previous = now;
+        glfwPollEvents();
+        if (validate)
+        {
+            const glm::vec2 input = frame > 0 && frame < 70 ? glm::vec2(0, 1) : glm::vec2(0);
+            if (frame == 90) KeyCallback(window, GLFW_KEY_C, 0, GLFW_PRESS, 0);
+            if (frame == 110) KeyCallback(window, GLFW_KEY_C, 0, GLFW_PRESS, 0);
+            ApplyMovement(input, frame >= 35 && frame < 65, 0, dt);
+        }
+        else DoMovement(window, dt);
+        if (environment && cameraMode == CameraMode::ThirdPerson)
+        {
+            const glm::vec3 source = player.position / ENVIRONMENT_SCALE + SOURCE_SPAWN;
+            float floor = 0.0f;
+            if (ground.Sample(source.x, source.z, source.y, floor))
+                player.position.y = glm::mix(player.position.y,
+                    (floor - SOURCE_SPAWN.y) * ENVIRONMENT_SCALE, 1.0f - std::exp(-20.0f * dt));
+        }
+        followCamera.Update(player, dt, ENVIRONMENT_SCALE);
+        if (validate && environment)
+        {
+            if (frame == 130)
+            {
+                const glm::vec3 center = (plazaLights.instances[0].base + plazaLights.instances[2].base) * 0.5f;
+                SetValidationCamera(center + glm::vec3(0, 1450, -20), center);
+            }
+            if (frame == 140)
+            {
+                const auto& instance = plazaLights.instances[6];
+                SetValidationCamera(instance.base + glm::vec3(30, 25, -65), instance.base + glm::vec3(0, 27, 0));
+            }
+            if (frame == 150)
+            {
+                glm::vec3 min, max;
+                if (!environment->GetMaterialBounds("Arco_Ofrenda.001", min, max))
+                    throw std::runtime_error("Falta el arco del Pasillo.");
+                const glm::vec3 center = ((min + max) * 0.5f - SOURCE_SPAWN) * ENVIRONMENT_SCALE;
+                SetValidationCamera(center + glm::vec3(160, 25, 160), center);
+            }
+        }
+        int width, height;
+        glfwGetFramebufferSize(window, &width, &height);
+        if (width <= 0 || height <= 0) { glfwWaitEventsTimeout(0.05); continue; }
+        glViewport(0, 0, width, height);
+        glClearColor(0.05f, 0.05f, 0.08f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        const glm::vec3 eye = cameraMode == CameraMode::Free ? freeCamera.GetPosition() : followCamera.position;
+        const glm::mat4 view = cameraMode == CameraMode::Free ? freeCamera.GetViewMatrix() : followCamera.View();
+        const float fov = cameraMode == CameraMode::Free ? freeCamera.GetZoom() : 45.0f;
+        const glm::mat4 projection = glm::perspective(glm::radians(fov), static_cast<float>(width) / height,
+            0.02f * ENVIRONMENT_SCALE, std::max(10000.0f, sceneDiagonal * 1.5f + glm::length(eye)));
+        if (environment)
+        {
+            glm::mat4 model = glm::translate(glm::mat4(1), ENVIRONMENT_TRANSLATION);
+            model = glm::scale(model, glm::vec3(ENVIRONMENT_SCALE));
+            DrawObject(*environment, environmentShader, model, view, projection, false);
+            for (const auto& instance : plazaLights.instances)
+                DrawObject(lamp, environmentShader, instance.model, view, projection, false);
+        }
+        if (vegetation) vegetation->Draw(environmentShader, view, projection);
+        DrawObject(girl, characterShader, player.ModelMatrix(), view, projection, true);
+        glDepthFunc(GL_LEQUAL);
+        glDepthMask(GL_FALSE);
+        skyboxShader.Use();
+        const glm::mat4 rotation = glm::mat4(glm::mat3(view));
+        glUniformMatrix4fv(skyView, 1, GL_FALSE, glm::value_ptr(rotation));
+        glUniformMatrix4fv(skyProjection, 1, GL_FALSE, glm::value_ptr(projection));
+        skybox.Draw();
+        glDepthMask(GL_TRUE);
+        glDepthFunc(GL_LESS);
+        if (validate && (frame == 0 || frame == 45 || frame == 95 || frame == 130 || frame == 140 || frame == 150))
+        {
+            std::vector<float> depth(static_cast<size_t>(width) * height);
+            glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, depth.data());
+            if (std::none_of(depth.begin(), depth.end(), [](float z) { return z < 1.0f; }))
+                throw std::runtime_error("La camara no ve geometria.");
+            if (!capture.empty()) SaveFramebuffer(capture + "-" + std::to_string(frame) + ".tga", width, height);
+        }
+        if (frame == 0 || validate) CheckOpenGL("personaje, animacion, camaras y skybox");
+        glfwSwapBuffers(window);
+        if (validate && ++frame >= (environment ? 160 : 130))
+        {
+            std::cout << "VALIDACION OK: animacion suave, luces, ambas camaras y " << frame
+                << " frames sin errores OpenGL." << std::endl;
+            break;
+        }
+        if (!validate) ++frame;
+    }
+}
+}
 
-	lastX = xPos;
-	lastY = yPos;
-
-	camera.ProcessMouseMovement(xOffset, yOffset);
+int main(int argc, char** argv)
+{
+    const bool characterOnly = argc > 1 && std::string(argv[1]) == "--validate-character";
+    const bool validate = characterOnly || (argc > 1 && std::string(argv[1]) == "--validate");
+    const std::string capture = validate && argc > 2 ? argv[2] : "";
+    try
+    {
+        if (!SetResourceDirectory()) throw std::runtime_error("No se encontraron los recursos del proyecto.");
+    }
+    catch (const std::exception& e) { std::cerr << e.what() << std::endl; return EXIT_FAILURE; }
+    if (!glfwInit()) return EXIT_FAILURE;
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_DEPTH_BITS, 24);
+    if (validate) glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+    GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "Chignahuapan", nullptr, nullptr);
+    if (!window) { glfwTerminate(); return EXIT_FAILURE; }
+    glfwMakeContextCurrent(window);
+    glfwSwapInterval(validate ? 0 : 1);
+    glewExperimental = GL_TRUE;
+    if (glewInit() != GLEW_OK)
+    {
+        glfwDestroyWindow(window); glfwTerminate(); return EXIT_FAILURE;
+    }
+    while (glGetError() != GL_NO_ERROR) {}
+    glfwSetKeyCallback(window, KeyCallback);
+    glfwSetCursorPosCallback(window, MouseCallback);
+    glfwSetScrollCallback(window, [](GLFWwindow*, double, double y) {
+        if (cameraMode == CameraMode::Free) freeCamera.ProcessMouseScroll(static_cast<float>(y));
+        else followCamera.Scroll(static_cast<float>(y));
+    });
+    int result = EXIT_SUCCESS;
+    try { RunScene(window, validate, characterOnly, capture); }
+    catch (const std::exception& error)
+    {
+        std::cerr << "ERROR: " << error.what() << std::endl;
+        result = EXIT_FAILURE;
+    }
+    glfwDestroyWindow(window);
+    glfwTerminate();
+    return result;
 }

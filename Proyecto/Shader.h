@@ -1,106 +1,72 @@
-#ifndef SHADER_H
-#define SHADER_H
-
-#include <string>
+#pragma once
 #include <fstream>
 #include <sstream>
-#include <iostream>
-
+#include <stdexcept>
+#include <string>
+#include <vector>
 #include <GL/glew.h>
 
 class Shader
 {
 public:
-	GLuint Program;
-	GLuint uniformColor;
-	// Constructor generates the shader on the fly
-	Shader(const GLchar *vertexPath, const GLchar *fragmentPath)
-	{
-		// 1. Retrieve the vertex/fragment source code from filePath
-		std::string vertexCode;
-		std::string fragmentCode;
-		std::ifstream vShaderFile;
-		std::ifstream fShaderFile;
-		// ensures ifstream objects can throw exceptions:
-		vShaderFile.exceptions(std::ifstream::badbit);
-		fShaderFile.exceptions(std::ifstream::badbit);
-		try
-		{
-			// Open files
-			vShaderFile.open(vertexPath);
-			fShaderFile.open(fragmentPath);
-			std::stringstream vShaderStream, fShaderStream;
-			// Read file's buffer contents into streams
-			vShaderStream << vShaderFile.rdbuf();
-			fShaderStream << fShaderFile.rdbuf();
-			// close file handlers
-			vShaderFile.close();
-			fShaderFile.close();
-			// Convert stream into string
-			vertexCode = vShaderStream.str();
-			fragmentCode = fShaderStream.str();
-		}
-		catch (std::ifstream::failure e)
-		{
-			std::cout << "ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ" << std::endl;
-		}
-		const GLchar *vShaderCode = vertexCode.c_str();
-		const GLchar *fShaderCode = fragmentCode.c_str();
-		// 2. Compile shaders
-		GLuint vertex, fragment;
-		GLint success;
-		GLchar infoLog[512];
-		// Vertex Shader
-		vertex = glCreateShader(GL_VERTEX_SHADER);
-		glShaderSource(vertex, 1, &vShaderCode, NULL);
-		glCompileShader(vertex);
-		// Print compile errors if any
-		glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
-		if (!success)
-		{
-			glGetShaderInfoLog(vertex, 512, NULL, infoLog);
-			std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
-		}
-		// Fragment Shader
-		fragment = glCreateShader(GL_FRAGMENT_SHADER);
-		glShaderSource(fragment, 1, &fShaderCode, NULL);
-		glCompileShader(fragment);
-		// Print compile errors if any
-		glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
-		if (!success)
-		{
-			glGetShaderInfoLog(fragment, 512, NULL, infoLog);
-			std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
-		}
-		// Shader Program
-		this->Program = glCreateProgram();
-		glAttachShader(this->Program, vertex);
-		glAttachShader(this->Program, fragment);
-		glLinkProgram(this->Program);
-		// Print linking errors if any
-		glGetProgramiv(this->Program, GL_LINK_STATUS, &success);
-		if (!success)
-		{
-			glGetProgramInfoLog(this->Program, 512, NULL, infoLog);
-			std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
-		}
-		//le damos la localidad de color
-		uniformColor = glGetUniformLocation(this->Program, "color");
-		// Delete the shaders as they're linked into our program now and no longer necessery
-		glDeleteShader(vertex);
-		glDeleteShader(fragment);
-
-	}
-	// Uses the current shader
-	void Use()
-	{
-		glUseProgram(this->Program);
-	}
-
-	GLuint getColorLocation()
-	{
-		return uniformColor;
-	}
+    GLuint Program = 0;
+    Shader(const char* vertexPath, const char* fragmentPath)
+    {
+        const std::string vertexSource = ReadFile(vertexPath);
+        const std::string fragmentSource = ReadFile(fragmentPath);
+        const GLuint vertex = Compile(GL_VERTEX_SHADER, vertexSource, vertexPath);
+        GLuint fragment = 0;
+        try { fragment = Compile(GL_FRAGMENT_SHADER, fragmentSource, fragmentPath); }
+        catch (...) { glDeleteShader(vertex); throw; }
+        Program = glCreateProgram();
+        glAttachShader(Program, vertex);
+        glAttachShader(Program, fragment);
+        glLinkProgram(Program);
+        glDeleteShader(vertex);
+        glDeleteShader(fragment);
+        GLint success = GL_FALSE;
+        glGetProgramiv(Program, GL_LINK_STATUS, &success);
+        if (!success)
+        {
+            GLint length = 0;
+            glGetProgramiv(Program, GL_INFO_LOG_LENGTH, &length);
+            std::vector<char> log(static_cast<size_t>(length) + 1, '\0');
+            glGetProgramInfoLog(Program, static_cast<GLsizei>(log.size()), nullptr, log.data());
+            glDeleteProgram(Program); Program = 0;
+            throw std::runtime_error("Error al enlazar shader: " + std::string(log.data()));
+        }
+    }
+    ~Shader() { if (Program) glDeleteProgram(Program); }
+    Shader(const Shader&) = delete;
+    Shader& operator=(const Shader&) = delete;
+    void Use() const { glUseProgram(Program); }
+    GLint getColorLocation() const { return glGetUniformLocation(Program, "color"); }
+private:
+    static std::string ReadFile(const char* path)
+    {
+        std::ifstream file(path);
+        if (!file) throw std::runtime_error("No se pudo abrir el shader: " + std::string(path));
+        std::ostringstream source;
+        source << file.rdbuf();
+        return source.str();
+    }
+    static GLuint Compile(GLenum type, const std::string& source, const char* path)
+    {
+        const GLuint shader = glCreateShader(type);
+        const char* code = source.c_str();
+        glShaderSource(shader, 1, &code, nullptr);
+        glCompileShader(shader);
+        GLint success = GL_FALSE;
+        glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+        if (!success)
+        {
+            GLint length = 0;
+            glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &length);
+            std::vector<char> log(static_cast<size_t>(length) + 1, '\0');
+            glGetShaderInfoLog(shader, static_cast<GLsizei>(log.size()), nullptr, log.data());
+            glDeleteShader(shader);
+            throw std::runtime_error(std::string(path) + ": " + log.data());
+        }
+        return shader;
+    }
 };
-
-#endif
