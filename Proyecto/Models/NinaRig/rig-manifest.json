@@ -1,0 +1,45 @@
+{
+  "bones": [
+    "Root",
+    "Hips",
+    "Spine",
+    "Chest",
+    "Neck",
+    "Head",
+    "Clavicle.L",
+    "UpperArm.L",
+    "Forearm.L",
+    "Hand.L",
+    "Clavicle.R",
+    "UpperArm.R",
+    "Forearm.R",
+    "Hand.R",
+    "Thigh.L",
+    "Shin.L",
+    "Foot.L",
+    "Toe.L",
+    "Thigh.R",
+    "Shin.R",
+    "Foot.R",
+    "Toe.R"
+  ],
+  "clips": [
+    {
+      "name": "Idle",
+      "frames": 60,
+      "seconds": 2.0
+    },
+    {
+      "name": "Walk",
+      "frames": 32,
+      "seconds": 1.0666666666666667
+    },
+    {
+      "name": "Run",
+      "frames": 24,
+      "seconds": 0.8
+    }
+  ],
+  "meshes": 9,
+  "rest_pose": "relaxed arms, baked in bind pose"
+}

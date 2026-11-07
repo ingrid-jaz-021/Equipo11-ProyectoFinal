@@ -4,7 +4,6 @@
 #include <vector>
 
 // GL Includes
-#define GLEW_STATIC
 #include <GL/glew.h>
 
 #include <glm/glm.hpp>
@@ -60,15 +59,17 @@ public:
 	void ProcessKeyboard(Camera_Movement direction, GLfloat deltaTime)
 	{
 		GLfloat velocity = this->movementSpeed * deltaTime;
+		// Caminar sobre XZ aunque se mire hacia arriba o hacia abajo.
+		const glm::vec3 forward = glm::normalize(glm::vec3(this->front.x, 0.0f, this->front.z));
 
 		if (direction == FORWARD)
 		{
-			this->position += this->front * velocity;
+			this->position += forward * velocity;
 		}
 
 		if (direction == BACKWARD)
 		{
-			this->position -= this->front * velocity;
+			this->position -= forward * velocity;
 		}
 
 		if (direction == LEFT)
@@ -112,7 +113,21 @@ public:
 	// Processes input received from a mouse scroll-wheel event. Only requires input on the vertical wheel-axis
 	void ProcessMouseScroll(GLfloat yOffset)
 	{
+		this->zoom = glm::clamp(this->zoom - yOffset, 20.0f, 75.0f);
+	}
 
+	void SetMovementSpeed(GLfloat speed) { this->movementSpeed = speed; }
+	void ProcessFlyKeyboard(Camera_Movement direction, GLfloat deltaTime)
+	{
+		const float velocity = this->movementSpeed * deltaTime;
+		if (direction == FORWARD) this->position += this->front * velocity;
+		if (direction == BACKWARD) this->position -= this->front * velocity;
+		if (direction == LEFT) this->position -= this->right * velocity;
+		if (direction == RIGHT) this->position += this->right * velocity;
+	}
+	void ProcessVertical(GLfloat direction, GLfloat deltaTime)
+	{
+		this->position.y += direction * this->movementSpeed * deltaTime;
 	}
 
 	GLfloat GetZoom()
