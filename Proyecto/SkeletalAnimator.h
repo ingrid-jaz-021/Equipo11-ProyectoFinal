@@ -25,6 +25,8 @@ class SkeletalAnimator
     std::vector<Bone> bones;
     std::vector<Clip> clips;
     std::vector<glm::mat4> palette;
+    std::vector<glm::mat4> globalPose;
+    std::unordered_map<std::string,std::pair<unsigned,float>> influenceStats;
     glm::mat4 inverseRoot = glm::mat4(1);
     int idle = -1, walk = -1, run = -1;
     float idleTime = 0.0f;
@@ -87,6 +89,10 @@ public:
             {
                 const aiBone* bone=scene->mMeshes[mi]->mBones[bi];
                 const std::string name=bone->mName.C_Str();
+                auto& influence=influenceStats[name];
+                influence.first+=bone->mNumWeights;
+                for(unsigned w=0;w<bone->mNumWeights;++w)
+                    influence.second=std::max(influence.second,bone->mWeights[w].mWeight);
                 if(boneIds.count(name)) continue;
                 if(bones.size()>=MAX_SKIN_BONES) throw std::runtime_error("Demasiados huesos para el shader.");
                 const auto node=nodeIds.find(name);
@@ -164,7 +170,8 @@ public:
     {
         gait=glm::clamp(gait,0.0f,1.0f);running=glm::clamp(running,0.0f,1.0f);
         const float cycle=phase/6.28318530718f;
-        std::vector<glm::mat4> global(nodes.size());
+        globalPose.resize(nodes.size());
+        auto& global=globalPose;
         for(int i=0;i<static_cast<int>(nodes.size());++i)
         {
             const Node a=PoseNode(i,idle,idleTime),b=PoseNode(i,walk,cycle*clips[walk].duration),
@@ -181,4 +188,16 @@ public:
     const std::vector<glm::mat4>& Palette() const { return palette; }
     size_t BoneCount() const { return bones.size(); }
     size_t ClipCount() const { return clips.size(); }
+    bool HasDeformingJoint(const std::string& name) const
+    {
+        const auto found=influenceStats.find(name);
+        return found!=influenceStats.end()&&found->second.first>=12&&found->second.second>0.75f;
+    }
+    float JointFlexDegrees(const std::string& upper,const std::string& joint,const std::string& lower) const
+    {
+        const glm::vec3 a=glm::vec3(globalPose.at(nodeIds.at(upper))[3]);
+        const glm::vec3 b=glm::vec3(globalPose.at(nodeIds.at(joint))[3]);
+        const glm::vec3 c=glm::vec3(globalPose.at(nodeIds.at(lower))[3]);
+        return glm::degrees(std::acos(glm::clamp(glm::dot(glm::normalize(b-a),glm::normalize(c-b)),-1.0f,1.0f)));
+    }
 };

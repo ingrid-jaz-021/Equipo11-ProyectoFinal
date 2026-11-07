@@ -6,8 +6,10 @@
 #include <GL/glew.h>
 #include "UnicodeIO.h"
 #include "stb_image.h"
+#include "CutoutImage.h"
 
-inline GLuint LoadRgbaTexture(const std::string& filename, GLenum wrap=GL_REPEAT, int* outWidth=nullptr, int* outHeight=nullptr)
+inline GLuint LoadRgbaTexture(const std::string& filename, GLenum wrap=GL_REPEAT, int* outWidth=nullptr, int* outHeight=nullptr,
+    bool cleanCutout=false)
 {
     FILE* file=OpenUtf8File(filename.c_str(),L"rb");
     if(!file) throw std::runtime_error("No se pudo abrir la textura: "+filename);
@@ -15,9 +17,17 @@ inline GLuint LoadRgbaTexture(const std::string& filename, GLenum wrap=GL_REPEAT
     unsigned char* image=stbi_load_from_file(file,&width,&height,&channels,STBI_rgb_alpha);
     std::fclose(file);
     if(!image) throw std::runtime_error("No se pudo decodificar la textura: "+filename);
+    std::vector<unsigned char> cutout;
+    if(cleanCutout)
+    {
+        cutout.assign(image,image+static_cast<size_t>(width)*height*4);
+        stbi_image_free(image);image=nullptr;
+        PrepareCutoutImage(cutout,width,height);
+    }
     GLuint texture=0;glGenTextures(1,&texture);glBindTexture(GL_TEXTURE_2D,texture);
     GLint alignment;glGetIntegerv(GL_UNPACK_ALIGNMENT,&alignment);glPixelStorei(GL_UNPACK_ALIGNMENT,1);
-    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,width,height,0,GL_RGBA,GL_UNSIGNED_BYTE,image);
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,width,height,0,GL_RGBA,GL_UNSIGNED_BYTE,
+        cleanCutout?cutout.data():image);
     stbi_image_free(image);
     glGenerateMipmap(GL_TEXTURE_2D);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_LINEAR);

@@ -28,6 +28,7 @@ struct ModelOptions
 {
     GroundSurface* ground = nullptr;
     bool skeletal = false;
+    const char* boundaryProfileMaterial = nullptr;
 };
 
 class Model
@@ -65,6 +66,17 @@ public:
         min = found->second.min; max = found->second.max;
         return true;
     }
+    bool GetMaterialEndBounds(const std::string& name,int axis,float band,glm::vec3& min,glm::vec3& max) const
+    {
+        glm::vec3 lo,hi;
+        if(axis<0||axis>2||!options.boundaryProfileMaterial||name!=options.boundaryProfileMaterial||
+            !GetMaterialBounds(name,lo,hi)||boundaryProfile.empty()) return false;
+        min=glm::vec3((std::numeric_limits<float>::max)());
+        max=glm::vec3((std::numeric_limits<float>::lowest)());bool found=false;
+        for(const auto& p:boundaryProfile) if(p[axis]>=hi[axis]-band)
+        {min=glm::min(min,p);max=glm::max(max,p);found=true;}
+        return found;
+    }
 
 private:
     class ImportProgress : public Assimp::ProgressHandler
@@ -80,6 +92,7 @@ private:
     std::unordered_map<std::string, GLuint> texturesLoaded;
     std::string directory;
     ModelOptions options;
+    std::vector<glm::vec3> boundaryProfile;
     std::unique_ptr<SkeletalAnimator> skeleton;
     struct Bounds { glm::vec3 min, max; };
     std::unordered_map<std::string, Bounds> materialBounds;
@@ -177,6 +190,10 @@ private:
             if (face.mNumIndices == 3) indices.insert(indices.end(), face.mIndices, face.mIndices + 3);
         }
         if (indices.empty()) return;
+        // Solo se retienen los pocos vertices del tapete solicitado, nunca el
+        // escenario masivo. Permite medir su extremo de conexion con la plaza.
+        if(options.boundaryProfileMaterial&&materialName==options.boundaryProfileMaterial)
+            for(const auto& vertex:vertices) boundaryProfile.push_back(vertex.Position);
         const auto existingBounds = materialBounds.find(materialName);
         if (existingBounds == materialBounds.end()) materialBounds.emplace(materialName, Bounds{ meshMin, meshMax });
         else
@@ -185,9 +202,13 @@ private:
             existingBounds->second.max = glm::max(existingBounds->second.max, meshMax);
         }
         if (options.ground)
+        {
+            const bool grass=GroundSurface::IsRaisedGrass(materialName);
             for (size_t i = 0; i + 2 < indices.size(); i += 3)
                 options.ground->Add(vertices[indices[i]].Position,
-                    vertices[indices[i + 1]].Position, vertices[indices[i + 2]].Position);
+                    vertices[indices[i + 1]].Position, vertices[indices[i + 2]].Position,
+                    grass);
+        }
         MeshMaterial material;
         if (mesh->mMaterialIndex < scene->mNumMaterials)
         {

@@ -24,6 +24,10 @@
     <ClInclude Include="Texture2D.h" />
     <ClInclude Include="FloorUV.h" />
     <ClInclude Include="TreeVegetation.h" />
+    <ClInclude Include="AlphaBillboards.h" />
+    <ClInclude Include="CutoutImage.h" />
+    <ClInclude Include="ZocaloBackdrop.h" />
+    <ClInclude Include="MovementSettings.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="ZocaloLighting.h" />
     <ClInclude Include="CharacterController.h" />
@@ -40,6 +44,12 @@
     <None Include="Models\NinaRig\NinaRig.blend" />
     <None Include="tools\build_nina_rig.py" />
     <None Include="images\Arbol_RGBA.png" />
+    <None Include="images\Casa1.png" />
+    <None Include="images\Casa2.png" />
+    <None Include="images\Casa3.png" />
+    <None Include="images\Iglesia.png" />
+    <None Include="Shader\billboard.vs" />
+    <None Include="Shader\billboard.frag" />
     <None Include="Models\Farola\Farola.obj" />
     <None Include="Models\Farola\Farola.mtl" />
     <None Include="Models\niña zocalo.mtl" />

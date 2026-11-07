@@ -4,6 +4,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "SkeletalAnimator.h"
+#include "GroundSurface.h"
+#include "MovementSettings.h"
 
 class CharacterController
 {
@@ -14,7 +16,7 @@ public:
     float phase = 0.0f;
     float gait = 0.0f;
     float running = 0.0f;
-    float height = 13.5f;
+    float height = 28.0f;
     float modelScale = 10.0f;
     float modelFloor = 0.004732f;
 
@@ -30,6 +32,7 @@ public:
         velocity = glm::vec3(0.0f);
         yaw = phase = gait = running = 0.0f;
         hadInput = false;
+        fallVelocity = 0.0f;
         if (animator) animator->Reset();
     }
     void Attach(SkeletalAnimator* rig) { animator = rig; if (!rig) throw std::runtime_error("Personaje sin esqueleto."); rig->Reset(); }
@@ -56,7 +59,7 @@ public:
             desired = movementForward * input.y + right * input.x;
         }
         running = glm::mix(running, sprint && moving ? 1.0f : 0.0f, 1.0f - std::exp(-4.5f * dt));
-        const float speed = worldScale * glm::mix(1.05f, 2.60f, running);
+        const float speed = worldScale * glm::mix(MovementSettings::WalkSpeed, MovementSettings::RunSpeed, running);
         const glm::vec3 target = desired * speed;
         const float damping = moving ? 10.0f : 14.0f;
         const float decay = std::exp(-damping * dt);
@@ -71,14 +74,36 @@ public:
             const float delta = std::remainder(targetYaw - yaw, 6.28318530718f);
             yaw += delta * (1.0f - std::exp(-12.0f * dt));
             // Proporcion respecto a la altura: FBX puede usar centimetros.
-            const float cycleDistance = height * glm::mix(0.36f, 0.69f, running);
+            const float cycleDistance = height * glm::mix(0.46f, 0.86f, running);
             phase = std::fmod(phase + glm::length(displacement) * 6.28318530718f / cycleDistance, 6.28318530718f);
         }
-        const float weight = glm::clamp(actualSpeed / (worldScale * 1.05f), 0.0f, 1.0f);
+        const float weight = glm::clamp(actualSpeed / (worldScale * MovementSettings::WalkSpeed), 0.0f, 1.0f);
         gait = glm::mix(gait, weight, 1.0f - std::exp(-9.0f * dt));
         if (animator) animator->Update(dt, phase, gait, running);
     }
     glm::vec3 Forward() const { return glm::vec3(std::sin(yaw), 0.0f, std::cos(yaw)); }
+    void ConformToGround(const GroundSurface& ground,const glm::vec3& origin,float scale,float dt)
+    {
+        if(frozen) return;
+        const glm::vec3 source=position/scale+origin;
+        float floor=0;
+        const float radius=height/scale*0.12f;
+        if(!ground.SampleCharacter(source.x,source.z,source.y,origin.y,floor,radius))
+        { fallVelocity=0.0f; return; }
+        const float target=(floor-origin.y)*scale;
+        if(target>=position.y-0.001f)
+        {
+            // Subir de inmediato evita atravesar el bloque incluso un frame.
+            position.y=target;fallVelocity=0.0f;
+        }
+        else
+        {
+            const float gravity=18.0f*scale;
+            position.y+=fallVelocity*dt-0.5f*gravity*dt*dt;
+            fallVelocity-=gravity*dt;
+            if(position.y<=target){position.y=target;fallVelocity=0.0f;}
+        }
+    }
     const std::vector<glm::mat4>& Pose() const {
         static const std::vector<glm::mat4> identity(1, glm::mat4(1));
         return animator ? animator->Palette() : identity;
@@ -93,6 +118,7 @@ public:
 private:
     SkeletalAnimator* animator = nullptr;
     bool frozen = false;
+    float fallVelocity = 0.0f;
     bool hadInput = false;
     glm::vec3 movementForward = glm::vec3(0, 0, 1);
 };
@@ -100,7 +126,7 @@ private:
 class FollowCamera
 {
 public:
-    float pitch = 15.0f, orbit = 0.0f, distance = 4.0f;
+    float pitch = 18.0f, orbit = 18.0f, distance = MovementSettings::FollowDistance;
     glm::vec3 position = glm::vec3(0.0f);
     glm::vec3 target = glm::vec3(0.0f);
     void Mouse(float x, float y)
@@ -108,8 +134,8 @@ public:
         orbit = glm::clamp(orbit - x * 0.15f, -65.0f, 65.0f);
         pitch = glm::clamp(pitch + y * 0.15f, 0.0f, 60.0f);
     }
-    void Scroll(float amount) { distance = glm::clamp(distance - amount * 0.3f, 2.0f, 8.0f); }
-    void Reset() { pitch = 15.0f; orbit = 0.0f; distance = 4.0f; initialized = false; }
+    void Scroll(float amount) { distance = glm::clamp(distance - amount * 0.4f, 3.8f, 12.0f); }
+    void Reset() { pitch = 18.0f; orbit = 18.0f; distance = MovementSettings::FollowDistance; initialized = false; }
     void Update(const CharacterController& player, float dt, float scale, bool snap = false)
     {
         const glm::vec3 desiredTarget = player.position + glm::vec3(0, player.height * 0.68f, 0);
