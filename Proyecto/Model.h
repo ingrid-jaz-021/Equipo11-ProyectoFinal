@@ -185,9 +185,13 @@ private:
             existingBounds->second.max = glm::max(existingBounds->second.max, meshMax);
         }
         if (options.ground)
+        {
+            const bool grass=GroundSurface::IsRaisedGrass(materialName);
             for (size_t i = 0; i + 2 < indices.size(); i += 3)
                 options.ground->Add(vertices[indices[i]].Position,
-                    vertices[indices[i + 1]].Position, vertices[indices[i + 2]].Position);
+                    vertices[indices[i + 1]].Position, vertices[indices[i + 2]].Position,
+                    grass);
+        }
         MeshMaterial material;
         if (mesh->mMaterialIndex < scene->mNumMaterials)
         {

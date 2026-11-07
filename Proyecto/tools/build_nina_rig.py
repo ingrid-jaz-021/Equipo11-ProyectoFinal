@@ -2,7 +2,7 @@
 Run: blender-launcher.exe --background --python build_nina_rig.py
 Original OBJ/BLEND are preserved. Outputs go to Models/NinaRig.
 """
-import bpy, math, json, shutil, traceback
+import bpy, bmesh, math, json, shutil, traceback
 from pathlib import Path
 from mathutils import Vector, Quaternion
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +23,11 @@ def main():
         obj.select_set(True)
         bpy.ops.object.transform_apply(location=True,rotation=True,scale=True)
         obj.select_set(False)
+        if obj.name in {"Hand_L.003","Hand_L.004"}:
+            bm=bmesh.new();bm.from_mesh(obj.data)
+            bmesh.ops.subdivide_edges(bm,edges=list(bm.edges),cuts=2,use_grid_fill=True)
+            bmesh.ops.recalc_face_normals(bm,faces=list(bm.faces))
+            bm.to_mesh(obj.data);bm.free();obj.data.update()
     tex=OUT/"textures"
     tex.mkdir(exist_ok=True)
     names={"Black.001":"Ojos_Boca_Niña.png","Teal":"Ojos_Boca_Niña.png",
@@ -132,9 +137,11 @@ def main():
         for v,co in zip(o.data.vertices,baked[o.name]): v.co=co
         o.data.update()
     rig.animation_data_create()
+    sole_meshes=[o for o in meshes if o.name.startswith("Shoe")]
+    sole_level=min(v.co.z for o in sole_meshes for v in o.data.vertices)
     scene=bpy.context.scene;scene.render.fps=30
     clips=[]
-    for name,count,run in [("Idle",60,0),("Walk",32,0),("Run",24,1)]:
+    for name,count,run in [("Idle",60,0),("Walk",40,0),("Run",30,1)]:
         action=bpy.data.actions.new(name);action.use_fake_user=True
         rig.animation_data.action=action
         for frame in range(count+1):
@@ -145,13 +152,17 @@ def main():
             if name=="Idle":
                 rotate_world("Chest",(1,0,0),math.radians(0.7)*math.sin(phase))
                 rotate_world("Head",(0,1,0),math.radians(0.6)*math.sin(phase))
-                for s in ["L","R"]: rotate_world("Forearm."+s,(1,0,0),-0.12)
+                for side in ["L","R"]:
+                    rotate_world("Forearm."+side,(1,0,0),-math.radians(18))
+                    rotate_world("Thigh."+side,(1,0,0),-0.08)
+                    rotate_world("Shin."+side,(1,0,0),0.18)
+                    rotate_world("Foot."+side,(1,0,0),-0.10)
             else:
-                duty=mix(0.60,0.40,run);reach=mix(0.14,0.18,run)
-                root_y=-mix(0.004,0.012,run)-mix(0.032,0.048,run)*(0.5+0.5*math.cos(2*phase))
+                duty=mix(0.60,0.40,run);reach=mix(0.18,0.225,run)
+                root_y=-mix(0.007,0.015,run)-mix(0.050,0.075,run)*(0.5+0.5*math.cos(2*phase))
                 rig.pose.bones["Hips"].location.y=root_y
-                rotate_world("Hips",(0,0,1),math.radians(1.2)*math.sin(phase))
-                rotate_world("Chest",(0,1,0),math.radians(mix(1.5,3,run))*math.sin(phase))
+                rotate_world("Hips",(0,0,1),math.radians(mix(1.6,2.4,run))*math.sin(phase))
+                rotate_world("Chest",(0,1,0),math.radians(mix(3,5,run))*math.sin(phase))
                 for s,sign in [("L",1),("R",-1)]:
                     cycle=(frame/count+(0 if sign==1 else 0.5))%1
                     lift=0
@@ -161,19 +172,29 @@ def main():
                         t=(cycle-duty)/(1-duty)
                         tangent=-2*reach*(1-duty)/duty
                         fz=-reach+tangent*t+(2*reach-tangent)*smooth(t)
-                        lift=64*(t*(1-t))**3*mix(0.035,0.075,run)
+                        lift=64*(t*(1-t))**3*mix(0.060,0.120,run)
                     dz=fz+0.01;dy=0.105+lift-root_y-0.43
                     a,b=0.175,0.150
                     dist=max(0.12,min(a+b-0.001,math.hypot(dz,dy)))
                     knee=math.acos(max(-1,min(1,(dist*dist-a*a-b*b)/(2*a*b))))
-                    knee=min(knee,mix(1.15,1.6,run))
+                    knee=min(knee,mix(1.45,1.95,run))
                     hip=math.atan2(-dz,-dy)-math.atan2(b*math.sin(knee),a+b*math.cos(knee))
-                    hip=max(-0.65,min(0.55,hip))
+                    hip=max(-0.85,min(0.70,hip))
                     rotate_world("Thigh."+s,(1,0,0),hip)
                     rotate_world("Shin."+s,(1,0,0),knee)
                     rotate_world("Foot."+s,(1,0,0),max(-0.55,min(0.55,-hip-knee)))
-                    rotate_world("UpperArm."+s,(1,0,0),sign*math.sin(phase)*mix(0.17,0.28,run))
-                    rotate_world("Forearm."+s,(1,0,0),-mix(0.18,0.65,run)-0.04*sign*math.cos(phase))
+                    rotate_world("UpperArm."+s,(1,0,0),sign*math.sin(phase)*mix(0.28,0.42,run))
+                    elbow_wave=0.5+0.5*sign*math.cos(phase-0.2)
+                    elbow_degrees=mix(mix(25,55,elbow_wave),mix(55,100,elbow_wave),run)
+                    rotate_world("Forearm."+s,(1,0,0),-math.radians(elbow_degrees))
+                    rotate_world("Hand."+s,(1,0,0),0.08*sign*math.sin(phase-0.2))
+            # Hornea el contacto real de las suelas; evita atravesar el piso
+            # incluso al doblar rodillas o inclinar el pie durante el apoyo.
+            bpy.context.view_layer.update()
+            deps=bpy.context.evaluated_depsgraph_get()
+            minimum=min(v.co.z for o in sole_meshes for v in o.evaluated_get(deps).data.vertices)
+            rig.pose.bones["Hips"].location.y+=sole_level-minimum
+            bpy.context.view_layer.update()
             for pb in rig.pose.bones:
                 pb.keyframe_insert(data_path="location",frame=frame,group=pb.name)
                 pb.keyframe_insert(data_path="rotation_quaternion",frame=frame,group=pb.name)
@@ -196,8 +217,21 @@ def main():
     bpy.ops.export_scene.gltf(filepath=str(OUT/"NinaRig.glb"),export_format='GLB',
         use_selection=True,export_animations=True,export_animation_mode='ACTIONS',
         export_skins=True,export_influence_nb=4,export_rest_position_armature=True)
+    ranges={}
+    for name in ["Idle","Walk","Run"]:
+        rig.animation_data.action=bpy.data.actions[name]
+        ranges[name]={}
+        for side in ["L","R"]:
+            for joint,names in [("elbow",["UpperArm.","Forearm.","Hand."]),("knee",["Thigh.","Shin.","Foot."])]:
+                angles=[]
+                for frame in range(int(rig.animation_data.action.frame_range[1])+1):
+                    scene.frame_set(frame);bpy.context.view_layer.update()
+                    a,b,c=[rig.pose.bones[n+side].head.copy() for n in names]
+                    angles.append(math.degrees((b-a).angle(c-b)))
+                ranges[name][joint+side]={"min":min(angles),"max":max(angles)}
     (OUT/"rig-manifest.json").write_text(json.dumps({"bones":list(arm.bones.keys()),
-        "clips":clips,"meshes":len(meshes),"rest_pose":"relaxed arms, baked in bind pose"},indent=2),encoding="utf8")
+        "clips":clips,"meshes":len(meshes),"rest_pose":"relaxed arms, baked in bind pose",
+        "joint_ranges_degrees":ranges,"deformation_support_loops":2,"foot_contact_baked":True},indent=2),encoding="utf8")
 try: main()
 except Exception:
     (OUT/"rig-error.txt").write_text(traceback.format_exc(),encoding="utf8")

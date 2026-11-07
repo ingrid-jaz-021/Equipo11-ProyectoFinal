@@ -24,6 +24,7 @@
     <ClInclude Include="Texture2D.h" />
     <ClInclude Include="FloorUV.h" />
     <ClInclude Include="TreeVegetation.h" />
+    <ClInclude Include="MovementSettings.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="ZocaloLighting.h" />
     <ClInclude Include="CharacterController.h" />

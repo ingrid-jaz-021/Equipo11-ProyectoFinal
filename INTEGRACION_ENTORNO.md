@@ -26,6 +26,12 @@ El modelo activo es **`Models/NinaRig/NinaRig.fbx`**. Blender genero:
 - Pesos normalizados de hasta cuatro huesos por vertice, guardados en el modelo.
 - Pose de enlace con brazos relajados, horquillas de hombro/clavicula y codos propios.
 - Clips **Idle**, **Walk** y **Run** con keyframes de posicion, quaternion y escala.
+- Codos y rodillas con pesos propios y dos cortes adicionales de soporte en las
+  extremidades para repartir la flexion sin doblar brazos desde los hombros.
+- Codos de marcha entre 24 y 53 grados; de carrera entre 53 y 96 grados.
+  Rodillas de marcha hasta 74 grados y de carrera hasta 108 grados.
+- Contacto de las suelas horneado en cada keyframe para mantener los pies sobre
+  el suelo durante la flexion y el balanceo del cuerpo.
 - Versiones `.blend`, `.fbx` y `.glb`, con ocho texturas copiadas a nombres ASCII.
 
 `SkeletalAnimator.h` importa la jerarquia, inverse bind matrices, pesos y canales
@@ -45,6 +51,23 @@ la carpeta de la solucion:
 El script crea el rig, aplica la pose de enlace relajada, asigna los grupos de
 vertices, hornea los tres clips y exporta. Los pivotes estan ajustados a la niña
 suministrada; un modelo de anatomia diferente requiere retocar este script.
+
+## Tamano, velocidad y altura del terreno
+
+`MovementSettings.h` centraliza los ajustes. La niña mide 2.8 unidades del modelo
+fuente, aproximadamente el doble de la escala anterior. Con la matriz global x10,
+su altura visible es de 28 unidades del mundo. Camina a 2.6 unidades fuente/segundo
+y corre a 6.5; la camara libre usa 18 y 45 con Shift. El desplazamiento conserva
+su integracion con deltaTime y la cadencia depende de la distancia recorrida.
+
+`GroundSurface.h` guarda los triangulos transitables y los indexa en una rejilla.
+La altura se consulta con cinco rayos verticales: centro y extremos de la huella.
+Los ocho materiales de pasto permiten subir las jardineras elevadas, incluso con
+caras de orientacion invertida. La prueba usa los triangulos reales y respeta los
+bloques triangulares, sin confundir las esquinas vacias de sus cajas delimitadoras.
+Al entrar al pasto, el personaje se eleva inmediatamente para evitar penetracion;
+al salir, desciende por gravedad hasta el adoquin. La camara libre congela tambien
+esta correccion de altura.
 
 ## Arboles Crossed Quads
 
@@ -107,9 +130,11 @@ El skybox conserva filtrado continuo y correccion de diferencias entre caras.
 `--validate` prueba movimiento a distintos FPS, diagonales, escala UV y bloqueo
 de controles. Con el FBX real cargado, simula C y WASD y comprueba que las matrices
 de huesos y la posicion permanezcan exactamente iguales mientras la camara se mueve.
-Dibuja 160 frames con modelos, arboles, luces y ambas camaras; verifica profundidad
-y errores de OpenGL. `--validate-character` omite el entorno masivo y dibuja
-130 frames. Un segundo argumento opcional define el prefijo de capturas TGA.
+Dibuja 200 frames con modelos, arboles, luces y ambas camaras; verifica profundidad
+y errores de OpenGL. Mide la flexion de codos y rodillas en los clips importados,
+prueba entrada/salida de pasto a 30/60/144 FPS y comprueba las tapas elevadas del
+escenario real. `--validate-character` omite el entorno masivo y dibuja 140 frames.
+Un segundo argumento opcional define el prefijo de capturas TGA.
 
 La carga del OBJ de 325 MB puede tardar varios minutos. La navegacion ajusta
 la altura al terreno, pero no incluye colisiones solidas contra paredes.

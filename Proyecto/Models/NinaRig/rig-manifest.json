@@ -31,15 +31,73 @@
     },
     {
       "name": "Walk",
-      "frames": 32,
-      "seconds": 1.0666666666666667
+      "frames": 40,
+      "seconds": 1.3333333333333333
     },
     {
       "name": "Run",
-      "frames": 24,
-      "seconds": 0.8
+      "frames": 30,
+      "seconds": 1.0
     }
   ],
   "meshes": 9,
-  "rest_pose": "relaxed arms, baked in bind pose"
+  "rest_pose": "relaxed arms, baked in bind pose",
+  "joint_ranges_degrees": {
+    "Idle": {
+      "elbowL": {
+        "min": 17.461074669719533,
+        "max": 17.461074669719533
+      },
+      "kneeL": {
+        "min": 7.272515635757362,
+        "max": 7.272515635757362
+      },
+      "elbowR": {
+        "min": 17.461074669719533,
+        "max": 17.461074669719533
+      },
+      "kneeR": {
+        "min": 7.272515635757362,
+        "max": 7.272515635757362
+      }
+    },
+    "Walk": {
+      "elbowL": {
+        "min": 24.259325875173303,
+        "max": 53.22175950337189
+      },
+      "kneeL": {
+        "min": 6.144237540536602,
+        "max": 74.00874014791577
+      },
+      "elbowR": {
+        "min": 24.25931733743684,
+        "max": 53.22175950337189
+      },
+      "kneeR": {
+        "min": 6.144237540536602,
+        "max": 74.00874014791577
+      }
+    },
+    "Run": {
+      "elbowL": {
+        "min": 53.23603459873722,
+        "max": 96.02387418259258
+      },
+      "kneeL": {
+        "min": 6.144237540536602,
+        "max": 107.88253058183875
+      },
+      "elbowR": {
+        "min": 53.23603118364263,
+        "max": 96.02387418259258
+      },
+      "kneeR": {
+        "min": 6.144237540536602,
+        "max": 107.88253058183875
+      }
+    }
+  },
+  "deformation_support_loops": 2,
+  "foot_contact_baked": true
 }
