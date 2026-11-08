@@ -27,6 +27,7 @@
     <ClInclude Include="AlphaBillboards.h" />
     <ClInclude Include="CutoutImage.h" />
     <ClInclude Include="ZocaloBackdrop.h" />
+    <ClInclude Include="WaterSurface.h" />
     <ClInclude Include="MovementSettings.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="ZocaloLighting.h" />
@@ -50,6 +51,10 @@
     <None Include="images\Iglesia.png" />
     <None Include="Shader\billboard.vs" />
     <None Include="Shader\billboard.frag" />
+    <None Include="Shader\water.vs" />
+    <None Include="Shader\water.frag" />
+    <None Include="Models\EntornoCompleto\Laguna\Agua\WaterPlane.txt" />
+    <None Include="Models\EntornoCompleto\Laguna\Agua\River_Water_Texture-427.jpg" />
     <None Include="Models\Farola\Farola.obj" />
     <None Include="Models\Farola\Farola.mtl" />
     <None Include="Models\niña zocalo.mtl" />

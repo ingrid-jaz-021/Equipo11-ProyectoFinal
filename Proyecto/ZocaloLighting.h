@@ -6,6 +6,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "Model.h"
+#include "MovementSettings.h"
 
 class ZocaloLighting
 {
@@ -34,7 +35,7 @@ public:
         // Medido sobre la malla real: centro local (0.397158, 1.867290, 0).
         // Se vuelve a calcular tras Assimp para respetar cualquier transformacion del OBJ.
         const glm::vec3 bulb = (glassMin + glassMax) * 0.5f;
-        const float lampScale = 5.0f * worldScale / (lamp.GetMaxBounds().y - lamp.GetMinBounds().y);
+        const float lampScale = MovementSettings::LampHeight * worldScale / (lamp.GetMaxBounds().y - lamp.GetMinBounds().y);
         // El poste de este export esta centrado en XZ=(0,0), no en el centro del brazo lateral.
         const glm::vec3 footAnchor(0.0f, lamp.GetMinBounds().y, 0.0f);
         const glm::vec2 center((kioskMin.x + kioskMax.x) * 0.5f, (kioskMin.z + kioskMax.z) * 0.5f);
@@ -52,7 +53,7 @@ public:
             (floorMin.z - sourceOrigin.z) * worldScale,
             (floorMax.x - sourceOrigin.x) * worldScale,
             (floorMax.z - sourceOrigin.z) * worldScale);
-        range = 22.0f * worldScale;
+        range = 28.0f * worldScale;
         for (size_t i = 0; i < sites.size(); ++i)
         {
             if (sites[i].x <= floorMin.x || sites[i].x >= floorMax.x ||
@@ -69,11 +70,30 @@ public:
             model = glm::scale(model, glm::vec3(lampScale));
             model = glm::translate(model, -footAnchor);
             instances[i].model = model;
-            instances[i].light = glm::vec3(model * glm::vec4(bulb, 1.0f));
+            // Recalcular los tres offsets con la NUEVA escala. Incluye altura
+            // del cristal y brazo lateral; nunca reutiliza la altura antigua.
+            const glm::vec3 scaledBulb=(bulb-footAnchor)*lampScale;
+            const glm::mat4 rotation=glm::rotate(glm::mat4(1),yaw,glm::vec3(0,1,0));
+            instances[i].light=instances[i].base+glm::vec3(rotation*glm::vec4(scaledBulb,0));
             if (instances[i].light.y <= instances[i].base.y ||
                 !std::isfinite(instances[i].light.y))
                 throw std::runtime_error("Offset del foco invalido.");
         }
+    }
+
+    void Validate(const Model& lamp,float worldScale) const
+    {
+        glm::vec3 lo,hi;
+        if(!lamp.GetMaterialBounds("Material.002",lo,hi))throw std::runtime_error("Falta el cristal de las farolas.");
+        for(const auto& instance:instances)
+        {
+            const auto crystalCenter=glm::vec3(instance.model*glm::vec4((lo+hi)*.5f,1));
+            const float height=glm::length(glm::vec3(instance.model[1]))*(lamp.GetMaxBounds().y-lamp.GetMinBounds().y);
+            if(glm::length(crystalCenter-instance.light)>.001f||std::abs(height-MovementSettings::LampHeight*worldScale)>.001f)
+                throw std::runtime_error("La luz no coincide con el cristal de la farola ampliada.");
+        }
+        std::cout<<"Farolas OK: altura "<<MovementSettings::LampHeight<<", 8 luces en el centro del cristal; offset Y "
+            <<(instances[0].light.y-instances[0].base.y)/worldScale<<" unidades fuente."<<std::endl;
     }
 
     void Upload(const Shader& shader) const

@@ -61,13 +61,18 @@ y corre a 6.5; la camara libre usa 18 y 45 con Shift. El desplazamiento conserva
 su integracion con deltaTime y la cadencia depende de la distancia recorrida.
 
 `GroundSurface.h` guarda los triangulos transitables y los indexa en una rejilla.
-La altura se consulta con cinco rayos verticales: centro y extremos de la huella.
-Los ocho materiales de pasto permiten subir las jardineras elevadas, incluso con
-caras de orientacion invertida. La prueba usa los triangulos reales y respeta los
-bloques triangulares, sin confundir las esquinas vacias de sus cajas delimitadoras.
-Al entrar al pasto, el personaje se eleva inmediatamente para evitar penetracion;
-al salir, desciende por gravedad hasta el adoquin. La camara libre congela tambien
-esta correccion de altura.
+La altura se consulta con nueve rayos verticales: centro y ocho extremos de la
+huella. Se registran pisos, banquetas, tarimas, rampas, pasto y plataformas; se
+excluyen techos, vegetacion decorativa y esculturas. Los pisos se detectan por
+ambas caras, incluso cuando Blender exporta winding invertido.
+La altura maxima de paso es el 80% de la altura de la niña: 2.24 unidades fuente,
+comun a todos los pisos. Esto permite subir desde la calle (Y=0.843929) a la
+banqueta (Y=2.038686) y al tapete de entrada del Pasillo (Y=1.7764). No existe el
+antiguo limite de 0.4 que dejaba al personaje bajo esas superficies.
+Al subir se ajusta inmediatamente para evitar penetracion; al bajar o perder
+apoyo actua la gravedad y el aterrizaje se limita a la superficie real. Las rampas
+se evaluan con interpolacion baricentrica de sus triangulos. La camara libre
+congela tambien esta correccion de altura.
 
 ## Arboles Crossed Quads
 
@@ -139,13 +144,33 @@ Assimp importa en segundo plano; los recursos OpenGL se crean en el hilo princip
 Se omiten mallas fuera de vista y no se conservan copias de su geometria en RAM.
 
 Las ocho farolas y sus luces se conservan: cuatro esquinas y cuatro alrededor
-del quiosco. El centro del foco se calcula con el material de cristal y se
-transforma con la matriz completa de cada farola. La iluminacion tiene
-atenuacion y alcance finito en el Zocalo.
+del quiosco. Miden **8 unidades fuente** (antes 5), controladas por LampHeight en
+MovementSettings.h. El centro local del cristal se obtiene del material de la
+farola. Su offset XYZ se vuelve a escalar y rotar antes de sumar la traslacion:
+la luz acompaña tanto la nueva altura como el brazo lateral del foco. La prueba
+compara cada luz con el centro del cristal transformado por la matriz completa.
+La iluminacion tiene atenuacion y alcance de 28 unidades fuente en el Zocalo.
 
 El arco mantiene estructura con Kd blanco puro y flores individuales con el atlas
 `Pasillo/tex_florCempa.png`, comprobado contra sus UV.
 El skybox conserva filtrado continuo y correccion de diferencias entre caras.
+
+## Agua animada de la Laguna
+
+`WaterSurface.h` crea un plano horizontal debajo de la tarima Material.027:
+su nivel es el minimo Y de esa malla menos 0.4 unidades fuente. `WaterPlane.txt`
+contiene los limites XZ medidos del material None.001 de `Laguna/Agua/Lago(Lag).obj`.
+Se carga solo el plano; ese OBJ auxiliar contiene ademas toda la escena duplicada.
+
+Se usa `Laguna/Agua/River_Water_Texture-427.jpg` con mipmaps, anisotropia y
+GL_MIRRORED_REPEAT para que la foto no produzca un salto de color entre repeticiones.
+Cada repeticion mide 36 unidades fuente de ancho y conserva la proporcion de los
+7360 x 4912 pixeles. `Shader/water.frag` recibe el tiempo de glfwGetTime() cada frame
+y mezcla dos capas con desplazamiento UV continuo y ondulacion suave. Una mezcla
+de cuatro parches con offsets estables elimina la cuadricula visible de la foto;
+textureGrad mantiene el LOD estable durante el desplazamiento. El agua
+escribe profundidad y queda ocluida por las plataformas y esculturas; se dibuja
+antes del skybox y de los planos transparentes.
 
 ## Validacion
 
@@ -157,13 +182,16 @@ El skybox conserva filtrado continuo y correccion de diferencias entre caras.
 `--validate` prueba movimiento a distintos FPS, diagonales, escala UV y bloqueo
 de controles. Con el FBX real cargado, simula C y WASD y comprueba que las matrices
 de huesos y la posicion permanezcan exactamente iguales mientras la camara se mueve.
-Dibuja 280 frames con modelos, arboles, fachadas, luces y ambas camaras; verifica profundidad
+Dibuja 330 frames con modelos, agua, arboles, fachadas, luces y ambas camaras; verifica profundidad
 y errores de OpenGL. Mide la flexion de codos y rodillas en los clips importados,
 prueba entrada/salida de pasto a 30/60/144 FPS y comprueba las tapas elevadas del
 escenario real. Comprueba exactamente una iglesia, repeticion de las tres casas,
 orientacion interior, cobertura exterior y ausencia de edificios en el acceso al
-Pasillo. Guarda vistas del paso desde la plaza y desde el Pasillo, mas una vista
-superior del perimetro ampliado. Una prueba de framebuffer
+Pasillo. Recorre calle/banqueta/Pasillo en ambos sentidos a 30/60/144 FPS y prueba
+rampas y pisos invertidos. Comprueba la altura y alineacion de las ocho luces.
+Guarda vistas del paso, del personaje sobre la entrada y de la laguna. Una prueba
+en GPU comprueba que el agua produce imagenes distintas en dos tiempos.
+Una prueba de framebuffer
 verifica en GPU el descarte alfa <0.1 y la mezcla de un pixel al 50% sobre el cielo.
 `--validate-character` omite el entorno masivo y dibuja 140 frames.
 Un segundo argumento opcional define el prefijo de capturas TGA.

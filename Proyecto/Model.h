@@ -201,7 +201,7 @@ private:
             existingBounds->second.min = glm::min(existingBounds->second.min, meshMin);
             existingBounds->second.max = glm::max(existingBounds->second.max, meshMax);
         }
-        if (options.ground)
+        if (options.ground&&GroundSurface::IsWalkableMaterial(materialName))
         {
             const bool grass=GroundSurface::IsRaisedGrass(materialName);
             for (size_t i = 0; i + 2 < indices.size(); i += 3)

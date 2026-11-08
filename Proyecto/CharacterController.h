@@ -88,10 +88,10 @@ public:
         const glm::vec3 source=position/scale+origin;
         float floor=0;
         const float radius=height/scale*0.12f;
-        if(!ground.SampleCharacter(source.x,source.z,source.y,origin.y,floor,radius))
-        { fallVelocity=0.0f; return; }
+        const float stepHeight=height/scale*.80f;
+        const bool supported=ground.SampleCharacter(source.x,source.z,source.y,floor,radius,stepHeight);
         const float target=(floor-origin.y)*scale;
-        if(target>=position.y-0.001f)
+        if(supported&&target>=position.y-0.001f)
         {
             // Subir de inmediato evita atravesar el bloque incluso un frame.
             position.y=target;fallVelocity=0.0f;
@@ -101,7 +101,7 @@ public:
             const float gravity=18.0f*scale;
             position.y+=fallVelocity*dt-0.5f*gravity*dt*dt;
             fallVelocity-=gravity*dt;
-            if(position.y<=target){position.y=target;fallVelocity=0.0f;}
+            if(supported&&position.y<=target){position.y=target;fallVelocity=0.0f;}
         }
     }
     const std::vector<glm::mat4>& Pose() const {

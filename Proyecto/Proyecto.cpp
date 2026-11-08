@@ -27,6 +27,7 @@
 #include "ZocaloLighting.h"
 #include "TreeVegetation.h"
 #include "ZocaloBackdrop.h"
+#include "WaterSurface.h"
 
 namespace
 {
@@ -314,15 +315,15 @@ void ValidateRaisedGround()
     terrain.Add({2,3.6f,-1},{2,3.6f,1},{4,3.6f,1},true);
     terrain.Add({2,3.6f,-1},{4,3.6f,1},{4,3.6f,-1},true);
     float height=0;
-    if(!terrain.SampleCharacter(3,0,2,2,height)||std::abs(height-3.6f)>0.001f)
+    if(!terrain.SampleCharacter(3,0,2,height)||std::abs(height-3.6f)>0.001f)
         throw std::runtime_error("No sube al pasto desde el nivel del piso.");
-    if(!terrain.SampleCharacter(5,0,3.6f,2,height)||std::abs(height-2.0f)>0.001f)
+    if(!terrain.SampleCharacter(5,0,3.6f,height)||std::abs(height-2.0f)>0.001f)
         throw std::runtime_error("El raycast conserva la altura del pasto al salir.");
     GroundSurface triangle;
     triangle.Add({-10,2,-10},{-10,2,10},{10,2,10});
     triangle.Add({-10,2,-10},{10,2,10},{10,2,-10});
     triangle.Add({2,3.6f,-1},{2,3.6f,1},{4,3.6f,1},true);
-    if(!triangle.SampleCharacter(3.8f,-0.8f,2,2,height)||height>2.01f)
+    if(!triangle.SampleCharacter(3.8f,-0.8f,2,height)||height>2.01f)
         throw std::runtime_error("Falso positivo de AABB fuera de una jardinera triangular.");
     for(int fps:{30,60,144})
     {
@@ -336,6 +337,62 @@ void ValidateRaisedGround()
     }
     std::cout<<"Altura OK: entrada/salida de pasto, triangulos y 30/60/144 FPS."<<std::endl;
 }
+void ValidateRamps()
+{
+    GroundSurface terrain;
+    terrain.Add({-10,2,-3},{-10,2,3},{10,2,3});terrain.Add({-10,2,-3},{10,2,3},{10,2,-3});
+    // Rampa y tapa con winding invertido a proposito.
+    terrain.Add({2,2,-1},{4,3.5f,1},{2,2,1});terrain.Add({2,2,-1},{4,3.5f,-1},{4,3.5f,1});
+    terrain.Add({4,3.5f,-1},{6,3.5f,1},{4,3.5f,1});terrain.Add({4,3.5f,-1},{6,3.5f,-1},{6,3.5f,1});
+    float hit=0;
+    if(!terrain.SampleCharacter(5,0,2,hit)||std::abs(hit-3.5f)>.001f)
+        throw std::runtime_error("No detecta una subida que no sea pasto o una cara invertida.");
+    for(int fps:{30,60,144})
+    {
+        CharacterController test;
+        for(int i=0;i<fps*4;++i)
+        {
+            const float x=(i+1)*2.0f/fps;test.position.x=x*10;
+            test.ConformToGround(terrain,{0,2,0},10,1.0f/fps);
+            const float expected=x>=2&&x<=6?2+std::min((x-2)*.75f,1.5f):2;
+            if(test.position.y<(expected-2)*10-.01f)throw std::runtime_error("Penetra una rampa durante la subida.");
+        }
+        if(std::abs(test.position.y)>.001f)throw std::runtime_error("No desciende desde la plataforma.");
+    }
+    std::cout<<"Relieve OK: rampas, tapas invertidas y descensos a 30/60/144 FPS."<<std::endl;
+}
+void ValidatePasilloGround(const GroundSurface& terrain)
+{
+    constexpr float x=-114.75f;
+    float road=0,curb=0,entry=0;
+    if(!terrain.SampleCharacter(x,270,SOURCE_SPAWN.y,road)||
+        !terrain.SampleCharacter(x,262,road,curb)||!terrain.SampleCharacter(x,245,road,entry)||
+        curb<road+.5f||entry<road+.5f)
+        throw std::runtime_error("No detecta la banqueta o el piso elevado de la entrada al Pasillo.");
+    for(int fps:{30,60,144})for(int direction:{-1,1})
+    {
+        CharacterController test;
+        const float start=direction<0?270.0f:242.0f,end=direction<0?242.0f:270.0f;
+        const float initial=direction<0?road:entry;
+        test.position=(glm::vec3(x,initial,start)-SOURCE_SPAWN)*ENVIRONMENT_SCALE;
+        float z=start;
+        while(std::abs(z-end)>.0001f)
+        {
+            z=direction<0?std::max(end,z-MovementSettings::RunSpeed/fps):std::min(end,z+MovementSettings::RunSpeed/fps);
+            test.position.z=(z-SOURCE_SPAWN.z)*ENVIRONMENT_SCALE;
+            test.ConformToGround(terrain,SOURCE_SPAWN,ENVIRONMENT_SCALE,1.0f/fps);
+            // En la entrada real el pie debe estar sobre la tapa, no debajo.
+            if(z>243&&z<246&&test.position.y<(entry-SOURCE_SPAWN.y)*ENVIRONMENT_SCALE-.01f)
+                throw std::runtime_error("La nina atraviesa el piso del Pasillo al caminar.");
+        }
+        for(int i=0;i<fps;++i)test.ConformToGround(terrain,SOURCE_SPAWN,ENVIRONMENT_SCALE,1.0f/fps);
+        const float expected=direction<0?entry:road;
+        if(std::abs(test.position.y-(expected-SOURCE_SPAWN.y)*ENVIRONMENT_SCALE)>.01f)
+            throw std::runtime_error("Altura final incorrecta al entrar/salir del Pasillo.");
+    }
+    std::cout<<"Pasillo real OK: calle Y="<<road<<", banqueta Y="<<curb<<", entrada Y="<<entry
+        <<"; recorrido en ambos sentidos a 30/60/144 FPS."<<std::endl;
+}
 void ValidateSceneGrass(const GroundSurface& terrain)
 {
     const auto samples=terrain.RaisedSamples(SOURCE_SPAWN.y);
@@ -343,7 +400,7 @@ void ValidateSceneGrass(const GroundSurface& terrain)
     for(const auto& point:samples)
     {
         float hit=0;
-        if(!terrain.SampleCharacter(point.x,point.z,SOURCE_SPAWN.y,SOURCE_SPAWN.y,hit)||hit<point.y-0.001f)
+        if(!terrain.SampleCharacter(point.x,point.z,SOURCE_SPAWN.y,hit)||hit<point.y-0.001f)
             throw std::runtime_error("Una jardinera real no admite el raycast desde el piso.");
     }
     std::cout<<"Pasto real OK: "<<samples.size()<<" superficies transitables elevadas."<<std::endl;
@@ -419,7 +476,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     player.Attach(girl.Animator());
     player.Configure(girl.GetMinBounds(), girl.GetMaxBounds(), MovementSettings::CharacterHeight * ENVIRONMENT_SCALE);
     ResetScene();
-    if (validate) { ValidateArticulation(*girl.Animator()); ValidateFrozenCharacter(window); ValidateRaisedGround(); }
+    if (validate) { ValidateArticulation(*girl.Animator()); ValidateFrozenCharacter(window); ValidateRaisedGround(); ValidateRamps(); }
     GroundSurface ground;
     std::unique_ptr<Model> environment;
     if (!characterOnly)
@@ -427,23 +484,27 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         glfwSetWindowTitle(window, "Cargando EntornoCompleto.obj...");
         environment = std::make_unique<Model>("Models/EntornoCompleto/EntornoCompleto.obj",
             keepLoading, ModelOptions{ &ground, false, "TapeteAserrin1.002" });
-        if (validate) ValidateSceneGrass(ground);
+        if (validate) { ValidateSceneGrass(ground); ValidatePasilloGround(ground); }
     }
     Model lamp("Models/Farola/Farola.obj", keepLoading);
     ZocaloLighting plazaLights;
     plazaLights.Build(lamp, environment.get(), ground, SOURCE_SPAWN, ENVIRONMENT_SCALE);
+    if(validate)plazaLights.Validate(lamp,ENVIRONMENT_SCALE);
     plazaLights.Upload(environmentShader);
     plazaLights.Upload(characterShader);
     std::cout << "Zocalo: 8 farolas, 8 focos alineados con su cristal." << std::endl;
     std::unique_ptr<AlphaBillboards> billboards;
     std::unique_ptr<TreeVegetation> vegetation;
     std::unique_ptr<ZocaloBackdrop> backdrop;
+    std::unique_ptr<WaterSurface> water;
     if (environment)
     {
         billboards=std::make_unique<AlphaBillboards>();
         vegetation=std::make_unique<TreeVegetation>(*billboards,ground,SOURCE_SPAWN,ENVIRONMENT_SCALE);
         backdrop=std::make_unique<ZocaloBackdrop>(*billboards,*environment,ground,SOURCE_SPAWN,ENVIRONMENT_SCALE);
         if(validate) billboards->ValidateAlpha();
+        water=std::make_unique<WaterSurface>(*environment,SOURCE_SPAWN,ENVIRONMENT_SCALE);
+        if(validate)water->ValidateAnimation();
     }
     Skybox skybox;
     UpdateWindowTitle(window);
@@ -497,7 +558,8 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             if (frame == 140)
             {
                 const auto& instance = plazaLights.instances[6];
-                SetValidationCamera(instance.base + glm::vec3(30, 25, -65), instance.base + glm::vec3(0, 27, 0));
+                const float h=MovementSettings::LampHeight*ENVIRONMENT_SCALE;
+                SetValidationCamera(instance.base+glm::vec3(h*.75f,h*.8f,-h*1.7f),instance.base+glm::vec3(0,h*.5f,0));
             }
             if (frame == 150)
             {
@@ -527,6 +589,19 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
                 SetValidationCamera(backdrop->PassageEye(frame==250),backdrop->PassageTarget());
             if(frame==270)
                 SetValidationCamera(backdrop->Center()+glm::vec3(0,2600,-300),backdrop->Center()+glm::vec3(0,0,-200));
+            if(frame==280||frame==290)
+                SetValidationCamera(water->Center()+glm::vec3(200,2300,2600),water->Center());
+            if(frame==300)
+                SetValidationCamera(water->Center()+glm::vec3(-850,220,450),water->Center()+glm::vec3(0,40,0));
+            if(frame==310||frame==320)
+            {
+                player.SetFrozen(false);player.Reset();
+                const float z=frame==310?245.0f:262.0f;
+                float y=0;ground.SampleCharacter(-114.75f,z,SOURCE_SPAWN.y,y);
+                player.position=(glm::vec3(-114.75f,y,z)-SOURCE_SPAWN)*ENVIRONMENT_SCALE;
+                player.ConformToGround(ground,SOURCE_SPAWN,ENVIRONMENT_SCALE,dt);
+                SetValidationCamera(player.position+glm::vec3(50,35,50),player.position+glm::vec3(0,player.height*.5f,0));
+            }
         }
         if (validate)
         {
@@ -576,6 +651,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
                 DrawObject(lamp, environmentShader, instance.model, view, projection, false);
         }
         DrawObject(girl, characterShader, player.ModelMatrix(), view, projection, true);
+        if(water)water->Draw(view,projection,eye,now);
         glDepthFunc(GL_LEQUAL);
         glDepthMask(GL_FALSE);
         skyboxShader.Use();
@@ -587,7 +663,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         glDepthFunc(GL_LESS);
         // Cielo y opacos primero; planos RGBA al final, ordenados de lejos a cerca.
         if(billboards) billboards->Draw(view,projection);
-        if (validate && (frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270))
+        if (validate && (frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 310 || frame == 320))
         {
             std::vector<float> depth(static_cast<size_t>(width) * height);
             glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, depth.data());
@@ -597,7 +673,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         }
         if (frame == 0 || validate) CheckOpenGL("personaje, animacion, camaras y skybox");
         glfwSwapBuffers(window);
-        if (validate && ++frame >= (environment ? 280 : 140))
+        if (validate && ++frame >= (environment ? 330 : 140))
         {
             std::cout << "VALIDACION OK: animacion suave, luces, ambas camaras y " << frame
                 << " frames sin errores OpenGL." << std::endl;

@@ -1,0 +1,4 @@
+69.677170 -230.460419 439.315247 139.177979 36.0
+# minX minZ maxX maxZ ancho-de-repeticion-UV (unidades fuente).
+# Limites medidos en None.001 de Lago(Lag).obj. Solo se necesita este plano,
+# no volver a importar los 348 MB que tambien contienen toda la escena duplicada.

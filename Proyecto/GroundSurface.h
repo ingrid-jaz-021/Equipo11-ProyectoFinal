@@ -18,14 +18,25 @@ public:
             material=="Material.011"||material=="Material.012"||material=="Material.015"||
             material=="Material.021"||material=="Material.022";
     }
+    static bool IsWalkableMaterial(const std::string& material)
+    {
+        if(IsRaisedGrass(material))return true;
+        // Pisos, banquetas, plataformas y rampas. No techos, esculturas,
+        // vegetacion decorativa ni el agua: no deben elevar al personaje.
+        for(const char* name:{"Material.001","Material.003","Material.004","Material.006","Material.013","Material.014",
+            "Material.016","Material.017","Material.018","Material.019","Material.020",
+            "Material.023","Material.027","TapeteAserrin1.002","TapeteAserrin1.003",
+            "TapeteAserrin2.001","piso_ofrenda.001","tarima_madera.001","rampa_cruz.001"})
+            if(material==name)return true;
+        return false;
+    }
     void Add(const glm::vec3& a,const glm::vec3& b,const glm::vec3& c,bool grass=false)
     {
         const glm::vec3 normal=glm::cross(b-a,c-a);
         const float area2=glm::length(normal);
-        // Las caras de pasto pueden venir con winding invertido; ambas tapas
-        // se aceptan y el raycast elige la mas alta, nunca una pared vertical.
-        const float up=grass?std::abs(normal.y):normal.y;
-        if(area2<0.04f||up<area2*0.60f) return;
+        // Las tapas del Pasillo y las plataformas tambien incluyen winding
+        // invertido. La colision usa geometria de piso por ambas caras.
+        if(area2<0.000001f||std::abs(normal.y)<area2*0.60f) return;
         const auto lo=glm::min(a,glm::min(b,c)),hi=glm::max(a,glm::max(b,c));
         const unsigned id=static_cast<unsigned>(triangles.size());
         triangles.push_back({a,b,c,grass});
@@ -34,19 +45,22 @@ public:
     }
     bool Sample(float x,float z,float currentY,float& height) const
     {
-        return Query(x,z,currentY,currentY,false,height);
+        return Query(x,z,currentY,0.40f,height);
     }
-    bool SampleCharacter(float x,float z,float currentY,float baseFloor,float& height,float radius=0.0f) const
+    bool SampleCharacter(float x,float z,float currentY,float& height,float radius=0.0f,float stepHeight=2.24f) const
     {
-        // Rayos verticales bajo el centro y cuatro extremos de la huella.
+        // Rayos verticales bajo el centro y ocho extremos de la huella.
         // Soporte parcial sobre la jardinera mantiene ambos pies por encima.
-        const std::array<glm::vec2,5> points={glm::vec2(x,z),glm::vec2(x+radius,z),
-            glm::vec2(x-radius,z),glm::vec2(x,z+radius),glm::vec2(x,z-radius)};
+        const float diagonal=radius*.70710678f;
+        const std::array<glm::vec2,9> points={glm::vec2(x,z),glm::vec2(x+radius,z),
+            glm::vec2(x-radius,z),glm::vec2(x,z+radius),glm::vec2(x,z-radius),
+            glm::vec2(x+diagonal,z+diagonal),glm::vec2(x-diagonal,z+diagonal),
+            glm::vec2(x+diagonal,z-diagonal),glm::vec2(x-diagonal,z-diagonal)};
         bool found=false;float highest=-(std::numeric_limits<float>::max)();
         for(size_t i=0;i<(radius>0?points.size():1);++i)
         {
             float y=0;
-            if(Query(points[i].x,points[i].y,currentY,baseFloor,true,y))
+            if(Query(points[i].x,points[i].y,currentY,stepHeight,y))
             {
                 highest=std::max(highest,y);found=true;
             }
@@ -68,7 +82,7 @@ private:
     struct Triangle {glm::vec3 a,b,c;bool grass;};
     std::vector<Triangle> triangles;
     std::unordered_map<uint64_t,std::vector<unsigned>> grid;
-    bool Query(float x,float z,float currentY,float baseFloor,bool climbGrass,float& height) const
+    bool Query(float x,float z,float currentY,float stepHeight,float& height) const
     {
         auto cell=grid.find(Key(Cell(x),Cell(z)));
         if(cell==grid.end()) return false;
@@ -82,8 +96,9 @@ private:
             const float v=((t.c.z-t.a.z)*(x-t.c.x)+(t.a.x-t.c.x)*(z-t.c.z))/det;
             if(u<-0.0001f||v<-0.0001f||u+v>1.0001f) continue;
             const float y=u*t.a.y+v*t.b.y+(1-u-v)*t.c.y;
-            const float ceiling=climbGrass&&t.grass?baseFloor+6.0f:currentY+0.40f;
-            if(y<=ceiling&&y>=std::min(currentY,baseFloor)-8.0f&&y>highest)
+            // Altura de paso comun a TODAS las superficies transitables.
+            // Sin limite inferior artificial: el rayo puede encontrar una bajada.
+            if(y<=currentY+stepHeight&&y>highest)
             {
                 highest=y;found=true;
             }

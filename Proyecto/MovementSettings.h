@@ -7,4 +7,5 @@ namespace MovementSettings
     constexpr float FlySpeed = 18.0f;
     constexpr float FlyFastSpeed = 45.0f;
     constexpr float FollowDistance = 6.5f;
+    constexpr float LampHeight = 8.0f; // Antes: 5.0; unidades fuente.
 }
