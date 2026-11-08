@@ -1,0 +1,32 @@
+{
+  "Idle": {
+    "file": "mocap/77_02.bvh",
+    "capture_frames": [
+      80,
+      320
+    ],
+    "phase_offset": 0,
+    "source_fps": 120.00048000192001,
+    "root_travel_source": 0.4848851835714856
+  },
+  "Walk": {
+    "file": "mocap/07_01.bvh",
+    "capture_frames": [
+      114,
+      243
+    ],
+    "phase_offset": 0.5581395348837209,
+    "source_fps": 120.00048000192001,
+    "root_travel_source": 26.539592725270655
+  },
+  "Run": {
+    "file": "mocap/09_01.bvh",
+    "capture_frames": [
+      13,
+      100
+    ],
+    "phase_offset": 0.7586206896551724,
+    "source_fps": 120.00048000192001,
+    "root_travel_source": 46.65797069627719
+  }
+}

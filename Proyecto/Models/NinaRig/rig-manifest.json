@@ -26,18 +26,18 @@
   "clips": [
     {
       "name": "Idle",
-      "frames": 60,
+      "frames": 120,
       "seconds": 2.0
     },
     {
       "name": "Walk",
-      "frames": 40,
-      "seconds": 1.3333333333333333
+      "frames": 64,
+      "seconds": 1.0666666666666667
     },
     {
       "name": "Run",
-      "frames": 30,
-      "seconds": 1.0
+      "frames": 43,
+      "seconds": 0.7166666666666667
     }
   ],
   "meshes": 9,
@@ -45,59 +45,79 @@
   "joint_ranges_degrees": {
     "Idle": {
       "elbowL": {
-        "min": 17.461074669719533,
-        "max": 17.461074669719533
+        "min": 20.28432482540784,
+        "max": 22.719176273943372
       },
       "kneeL": {
-        "min": 7.272515635757362,
-        "max": 7.272515635757362
+        "min": 13.685666261653829,
+        "max": 18.431207418671463
       },
       "elbowR": {
-        "min": 17.461074669719533,
-        "max": 17.461074669719533
+        "min": 24.504633826761605,
+        "max": 27.113412627416928
       },
       "kneeR": {
-        "min": 7.272515635757362,
-        "max": 7.272515635757362
+        "min": 0.0,
+        "max": 11.239080548124212
       }
     },
     "Walk": {
       "elbowL": {
-        "min": 24.259325875173303,
-        "max": 53.22175950337189
+        "min": 5.999988641020987,
+        "max": 48.20947299228222
       },
       "kneeL": {
-        "min": 6.144237540536602,
-        "max": 74.00874014791577
+        "min": 0.0,
+        "max": 67.80268000388045
       },
       "elbowR": {
-        "min": 24.25931733743684,
-        "max": 53.22175950337189
+        "min": 12.960575940686214,
+        "max": 47.97614348495083
       },
       "kneeR": {
-        "min": 6.144237540536602,
-        "max": 74.00874014791577
+        "min": 0.0,
+        "max": 69.94880740336849
       }
     },
     "Run": {
       "elbowL": {
-        "min": 53.23603459873722,
-        "max": 96.02387418259258
+        "min": 80.35329603775145,
+        "max": 93.99457716885759
       },
       "kneeL": {
-        "min": 6.144237540536602,
-        "max": 107.88253058183875
+        "min": 0.0,
+        "max": 116.29603273354132
       },
       "elbowR": {
-        "min": 53.23603118364263,
-        "max": 96.02387418259258
+        "min": 63.50461271392067,
+        "max": 86.60795297773141
       },
       "kneeR": {
-        "min": 6.144237540536602,
-        "max": 107.88253058183875
+        "min": 0.0,
+        "max": 107.67054200056907
       }
     }
   },
+  "shoulder_geometry": {
+    "modified_vertices": {
+      "Hand_L.002": 76,
+      "Hand_L.003": 1414
+    },
+    "t_pose_joint_x": {
+      "shoulder": 0.245,
+      "elbow": 0.405,
+      "wrist": 0.54,
+      "palm_tip": 0.585
+    },
+    "upper_arm_length": 0.16,
+    "forearm_length": 0.135,
+    "arm_radial_scale": [
+      0.78,
+      0.7
+    ],
+    "root_weights": "Chest -> UpperArm, smooth transition x=.20.. .275; shared with sleeve"
+  },
   "deformation_support_loops": 2,
-  "foot_contact_baked": true
+  "foot_contact_baked": true,
+  "motion_source": "CMU captured motion; see mocap-retarget.json"
 }

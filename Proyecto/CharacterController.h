@@ -74,24 +74,26 @@ public:
             const float delta = std::remainder(targetYaw - yaw, 6.28318530718f);
             yaw += delta * (1.0f - std::exp(-12.0f * dt));
             // Proporcion respecto a la altura: FBX puede usar centimetros.
-            const float cycleDistance = height * glm::mix(0.46f, 0.86f, running);
-            phase = std::fmod(phase + glm::length(displacement) * 6.28318530718f / cycleDistance, 6.28318530718f);
+            const float cycleDistance = height * glm::mix(MovementSettings::WalkStrideHeightRatio,MovementSettings::RunStrideHeightRatio,running);
+            const float advance=glm::length(displacement)*6.28318530718f/cycleDistance;
+            const float cadence=glm::mix(1.7f,2.8f,running);
+            phase=std::fmod(phase+std::min(advance,dt*6.28318530718f*cadence),6.28318530718f);
         }
         const float weight = glm::clamp(actualSpeed / (worldScale * MovementSettings::WalkSpeed), 0.0f, 1.0f);
         gait = glm::mix(gait, weight, 1.0f - std::exp(-9.0f * dt));
         if (animator) animator->Update(dt, phase, gait, running);
     }
     glm::vec3 Forward() const { return glm::vec3(std::sin(yaw), 0.0f, std::cos(yaw)); }
-    void ConformToGround(const GroundSurface& ground,const glm::vec3& origin,float scale,float dt)
+    void ConformToGround(const GroundSurface& ground,const glm::vec3& origin,float scale,float dt,float minStepHeight=0)
     {
         if(frozen) return;
         const glm::vec3 source=position/scale+origin;
         float floor=0;
         const float radius=height/scale*0.12f;
-        if(!ground.SampleCharacter(source.x,source.z,source.y,origin.y,floor,radius))
-        { fallVelocity=0.0f; return; }
+        const float stepHeight=std::max(height/scale*.80f,minStepHeight);
+        const bool supported=ground.SampleCharacter(source.x,source.z,source.y,floor,radius,stepHeight);
         const float target=(floor-origin.y)*scale;
-        if(target>=position.y-0.001f)
+        if(supported&&target>=position.y-0.001f)
         {
             // Subir de inmediato evita atravesar el bloque incluso un frame.
             position.y=target;fallVelocity=0.0f;
@@ -101,7 +103,7 @@ public:
             const float gravity=18.0f*scale;
             position.y+=fallVelocity*dt-0.5f*gravity*dt*dt;
             fallVelocity-=gravity*dt;
-            if(position.y<=target){position.y=target;fallVelocity=0.0f;}
+            if(supported&&position.y<=target){position.y=target;fallVelocity=0.0f;}
         }
     }
     const std::vector<glm::mat4>& Pose() const {

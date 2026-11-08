@@ -23,12 +23,13 @@
 #include "SkeletalAnimator.h"
 #include "Texture2D.h"
 #include "FloorUV.h"
+#include "MovementSettings.h"
 
 struct ModelOptions
 {
     GroundSurface* ground = nullptr;
     bool skeletal = false;
-    const char* boundaryProfileMaterial = nullptr;
+    std::vector<std::string> boundaryProfileMaterials;
 };
 
 class Model
@@ -44,14 +45,19 @@ public:
     Model(const Model&) = delete;
     Model& operator=(const Model&) = delete;
 
-    void Draw(const Shader& shader, const glm::mat4& clipFromModel, bool cull = true) const
+    void Draw(const Shader& shader,const glm::mat4& clipFromModel,bool cull,const glm::mat4& baseModel) const
     {
         // Planos del frustum en coordenadas del OBJ: omitir mallas enteras fuera de vista.
-        const glm::mat4 rows = glm::transpose(clipFromModel);
-        const std::array<glm::vec4, 6> planes = { rows[3] + rows[0], rows[3] - rows[0],
-            rows[3] + rows[1], rows[3] - rows[1], rows[3] + rows[2], rows[3] - rows[2] };
         for (const Mesh& mesh : meshes)
-            if (!cull || mesh.IsVisible(planes)) mesh.Draw(shader);
+        {
+            const auto rows=glm::transpose(clipFromModel*mesh.LocalTransform());
+            const std::array<glm::vec4,6> planes={rows[3]+rows[0],rows[3]-rows[0],rows[3]+rows[1],rows[3]-rows[1],rows[3]+rows[2],rows[3]-rows[2]};
+            if(cull&&!mesh.IsVisible(planes))continue;
+            const auto model=baseModel*mesh.LocalTransform();const auto normal=glm::transpose(glm::inverse(glm::mat3(model)));
+            glUniformMatrix4fv(glGetUniformLocation(shader.Program,"model"),1,GL_FALSE,&model[0][0]);
+            glUniformMatrix3fv(glGetUniformLocation(shader.Program,"normalMatrix"),1,GL_FALSE,&normal[0][0]);
+            mesh.Draw(shader);
+        }
         glBindVertexArray(0);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, 0);
@@ -59,6 +65,15 @@ public:
     const glm::vec3& GetMinBounds() const { return minBounds; }
     const glm::vec3& GetMaxBounds() const { return maxBounds; }
     SkeletalAnimator* Animator() { return skeleton.get(); }
+    void ValidateLayout() const
+    {
+        if(!options.ground)return;
+        glm::vec3 lo,hi;
+        if(!GetMaterialBounds("Material.014",lo,hi)||benchCount!=8||benchMaxHeight>2.1f||
+            std::abs((hi.y-lo.y)/kioskRawHeight-MovementSettings::KioskScale)>.001f)
+            throw std::runtime_error("Las proporciones del kiosko o de las ocho bancas no son correctas.");
+        std::cout<<"Proporciones OK: kiosko x"<<MovementSettings::KioskScale<<", "<<benchCount<<" bancas x"<<MovementSettings::BenchScale<<", respaldo maximo "<<benchMaxHeight<<"."<<std::endl;
+    }
     bool GetMaterialBounds(const std::string& name, glm::vec3& min, glm::vec3& max) const
     {
         const auto found = materialBounds.find(name);
@@ -69,11 +84,20 @@ public:
     bool GetMaterialEndBounds(const std::string& name,int axis,float band,glm::vec3& min,glm::vec3& max) const
     {
         glm::vec3 lo,hi;
-        if(axis<0||axis>2||!options.boundaryProfileMaterial||name!=options.boundaryProfileMaterial||
-            !GetMaterialBounds(name,lo,hi)||boundaryProfile.empty()) return false;
+        const auto profile=materialProfiles.find(name);
+        if(axis<0||axis>2||profile==materialProfiles.end()||!GetMaterialBounds(name,lo,hi)) return false;
         min=glm::vec3((std::numeric_limits<float>::max)());
         max=glm::vec3((std::numeric_limits<float>::lowest)());bool found=false;
-        for(const auto& p:boundaryProfile) if(p[axis]>=hi[axis]-band)
+        for(const auto& p:profile->second) if(p[axis]>=hi[axis]-band)
+        {min=glm::min(min,p);max=glm::max(max,p);found=true;}
+        return found;
+    }
+    bool GetMaterialSectionBounds(const std::string& name,int axis,float from,float to,glm::vec3& min,glm::vec3& max) const
+    {
+        const auto profile=materialProfiles.find(name);
+        if(profile==materialProfiles.end()||axis<0||axis>2||from>to)return false;
+        min=glm::vec3((std::numeric_limits<float>::max)());max=glm::vec3((std::numeric_limits<float>::lowest)());bool found=false;
+        for(const auto& p:profile->second)if(p[axis]>=from&&p[axis]<=to)
         {min=glm::min(min,p);max=glm::max(max,p);found=true;}
         return found;
     }
@@ -92,10 +116,13 @@ private:
     std::unordered_map<std::string, GLuint> texturesLoaded;
     std::string directory;
     ModelOptions options;
-    std::vector<glm::vec3> boundaryProfile;
+    std::unordered_map<std::string,std::vector<glm::vec3>> materialProfiles;
     std::unique_ptr<SkeletalAnimator> skeleton;
     struct Bounds { glm::vec3 min, max; };
     std::unordered_map<std::string, Bounds> materialBounds;
+    glm::mat4 kioskTransform=glm::mat4(1);
+    float floorLevel=2.005836f,kioskRawHeight=1,benchMaxHeight=0;
+    size_t benchCount=0;
     glm::vec3 minBounds = glm::vec3((std::numeric_limits<float>::max)());
     glm::vec3 maxBounds = glm::vec3((std::numeric_limits<float>::lowest)());
 
@@ -136,6 +163,7 @@ private:
             std::cout << "Esqueleto real: " << skeleton->BoneCount() << " huesos deformantes, "
                 << skeleton->ClipCount() << " clips." << std::endl;
         }
+        if(options.ground)ConfigureLayout(scene);
         meshes.reserve(scene->mNumMeshes);
         ProcessNode(scene->mRootNode, scene);
         if (meshes.empty()) throw std::runtime_error("El escenario no contiene triangulos.");
@@ -149,6 +177,95 @@ private:
             ProcessMesh(scene->mMeshes[node->mMeshes[i]], scene);
         for (unsigned int i = 0; i < node->mNumChildren; ++i)
             ProcessNode(node->mChildren[i], scene);
+    }
+    void ConfigureLayout(const aiScene* scene)
+    {
+        glm::vec3 lo((std::numeric_limits<float>::max)()),hi((std::numeric_limits<float>::lowest)());bool found=false;
+        for(unsigned m=0;m<scene->mNumMeshes;++m)
+        {
+            const auto* mesh=scene->mMeshes[m];aiString name;scene->mMaterials[mesh->mMaterialIndex]->Get(AI_MATKEY_NAME,name);
+            const std::string material=name.C_Str();
+            if(material!="Material.014"&&material!="Material.006")continue;
+            for(unsigned v=0;v<mesh->mNumVertices;++v)
+            {
+                const auto& p=mesh->mVertices[v];
+                if(material=="Material.006")floorLevel=std::max(floorLevel,p.y);
+                else{lo=glm::min(lo,glm::vec3(p.x,p.y,p.z));hi=glm::max(hi,glm::vec3(p.x,p.y,p.z));found=true;}
+            }
+        }
+        if(!found)throw std::runtime_error("No se pudo separar el kiosko del entorno.");
+        const glm::vec3 anchor((lo.x+hi.x)*.5f,floorLevel,(lo.z+hi.z)*.5f);
+        kioskTransform=glm::translate(glm::mat4(1),anchor);
+        kioskTransform=glm::scale(kioskTransform,glm::vec3(MovementSettings::KioskScale));
+        kioskTransform=glm::translate(kioskTransform,-anchor);
+        kioskRawHeight=hi.y-lo.y;
+    }
+    void AddPart(const std::vector<Vertex>& vertices,const std::vector<GLuint>& indices,const std::vector<SkinVertex>& skin,
+        const MeshMaterial& material,const std::string& name,const glm::mat4& transform)
+    {
+        glm::vec3 lo((std::numeric_limits<float>::max)()),hi((std::numeric_limits<float>::lowest)()),worldLo=lo,worldHi=hi;
+        for(const auto& v:vertices)
+        {
+            lo=glm::min(lo,v.Position);hi=glm::max(hi,v.Position);
+            const auto p=glm::vec3(transform*glm::vec4(v.Position,1));worldLo=glm::min(worldLo,p);worldHi=glm::max(worldHi,p);
+        }
+        if(!options.skeletal){minBounds=glm::min(minBounds,worldLo);maxBounds=glm::max(maxBounds,worldHi);}
+        auto found=materialBounds.find(name);
+        if(found==materialBounds.end())materialBounds.emplace(name,Bounds{worldLo,worldHi});
+        else{found->second.min=glm::min(found->second.min,worldLo);found->second.max=glm::max(found->second.max,worldHi);}
+        if(options.ground&&GroundSurface::IsWalkableMaterial(name))
+            for(size_t i=0;i+2<indices.size();i+=3)
+                options.ground->Add(glm::vec3(transform*glm::vec4(vertices[indices[i]].Position,1)),
+                    glm::vec3(transform*glm::vec4(vertices[indices[i+1]].Position,1)),
+                    glm::vec3(transform*glm::vec4(vertices[indices[i+2]].Position,1)),GroundSurface::IsRaisedGrass(name));
+        meshes.emplace_back(vertices,indices,material,lo,hi,skin,transform);
+    }
+    void AddBenches(const std::vector<Vertex>& vertices,const std::vector<GLuint>& indices,const MeshMaterial& material,const std::string& name)
+    {
+        constexpr size_t count=8;std::array<glm::vec2,count> centers{};
+        centers[0]={vertices.front().Position.x,vertices.front().Position.z};
+        for(size_t seed=1;seed<count;++seed)
+        {
+            float farthest=-1;
+            for(const auto& vertex:vertices)
+            {
+                const glm::vec2 p(vertex.Position.x,vertex.Position.z);float nearest=(std::numeric_limits<float>::max)();
+                for(size_t i=0;i<seed;++i)nearest=std::min(nearest,glm::dot(p-centers[i],p-centers[i]));
+                if(nearest>farthest){farthest=nearest;centers[seed]=p;}
+            }
+        }
+        const auto nearest=[&](const glm::vec2& p){size_t best=0;float distance=(std::numeric_limits<float>::max)();
+            for(size_t i=0;i<count;++i){float d=glm::dot(p-centers[i],p-centers[i]);if(d<distance){distance=d;best=i;}}return best;};
+        for(int iteration=0;iteration<40;++iteration)
+        {
+            std::array<glm::vec2,count> sum;sum.fill(glm::vec2(0));std::array<unsigned,count> counts{};
+            for(const auto& vertex:vertices){const glm::vec2 p(vertex.Position.x,vertex.Position.z);const auto id=nearest(p);sum[id]+=p;++counts[id];}
+            for(size_t i=0;i<count;++i)if(counts[i])centers[i]=sum[i]/static_cast<float>(counts[i]);
+        }
+        std::array<std::vector<GLuint>,count> groups;
+        for(size_t i=0;i+2<indices.size();i+=3)
+        {
+            const auto p=(vertices[indices[i]].Position+vertices[indices[i+1]].Position+vertices[indices[i+2]].Position)/3.0f;
+            auto& group=groups[nearest({p.x,p.z})];group.insert(group.end(),indices.begin()+i,indices.begin()+i+3);
+        }
+        for(const auto& group:groups)
+        {
+            if(group.empty())throw std::runtime_error("No se pudieron aislar las ocho bancas.");
+            std::vector<GLuint> remap(vertices.size(),(std::numeric_limits<GLuint>::max)()),localIndices;
+            std::vector<Vertex> localVertices;glm::vec3 lo((std::numeric_limits<float>::max)()),hi((std::numeric_limits<float>::lowest)());
+            for(GLuint old:group)
+            {
+                if(remap[old]==(std::numeric_limits<GLuint>::max)())
+                {remap[old]=static_cast<GLuint>(localVertices.size());localVertices.push_back(vertices[old]);lo=glm::min(lo,vertices[old].Position);hi=glm::max(hi,vertices[old].Position);}
+                localIndices.push_back(remap[old]);
+            }
+            if(std::max(hi.x-lo.x,hi.z-lo.z)>16)throw std::runtime_error("Una agrupacion de bancas contiene mas de un asiento.");
+            const glm::vec3 sourceAnchor((lo.x+hi.x)*.5f,lo.y,(lo.z+hi.z)*.5f),targetAnchor(sourceAnchor.x,floorLevel,sourceAnchor.z);
+            auto transform=glm::translate(glm::mat4(1),targetAnchor);
+            transform=glm::scale(transform,glm::vec3(MovementSettings::BenchScale));transform=glm::translate(transform,-sourceAnchor);
+            benchMaxHeight=std::max(benchMaxHeight,(hi.y-lo.y)*MovementSettings::BenchScale);++benchCount;
+            AddPart(localVertices,localIndices,{},material,name,transform);
+        }
     }
     void ProcessMesh(const aiMesh* mesh, const aiScene* scene)
     {
@@ -178,8 +295,7 @@ private:
                 vertex.TexCoords = glm::vec2(mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y);
             const glm::vec3 boundPosition = options.skeletal
                 ? skeleton->BindPosition(vertex.Position, skin[i]) : vertex.Position;
-            minBounds = glm::min(minBounds, boundPosition);
-            maxBounds = glm::max(maxBounds, boundPosition);
+            if(options.skeletal){minBounds=glm::min(minBounds,boundPosition);maxBounds=glm::max(maxBounds,boundPosition);}
             meshMin = glm::min(meshMin, boundPosition);
             meshMax = glm::max(meshMax, boundPosition);
             vertices.push_back(vertex);
@@ -190,25 +306,9 @@ private:
             if (face.mNumIndices == 3) indices.insert(indices.end(), face.mIndices, face.mIndices + 3);
         }
         if (indices.empty()) return;
-        // Solo se retienen los pocos vertices del tapete solicitado, nunca el
-        // escenario masivo. Permite medir su extremo de conexion con la plaza.
-        if(options.boundaryProfileMaterial&&materialName==options.boundaryProfileMaterial)
-            for(const auto& vertex:vertices) boundaryProfile.push_back(vertex.Position);
-        const auto existingBounds = materialBounds.find(materialName);
-        if (existingBounds == materialBounds.end()) materialBounds.emplace(materialName, Bounds{ meshMin, meshMax });
-        else
-        {
-            existingBounds->second.min = glm::min(existingBounds->second.min, meshMin);
-            existingBounds->second.max = glm::max(existingBounds->second.max, meshMax);
-        }
-        if (options.ground)
-        {
-            const bool grass=GroundSurface::IsRaisedGrass(materialName);
-            for (size_t i = 0; i + 2 < indices.size(); i += 3)
-                options.ground->Add(vertices[indices[i]].Position,
-                    vertices[indices[i + 1]].Position, vertices[indices[i + 2]].Position,
-                    grass);
-        }
+        // Solo perfiles pequenos: tapete terminal y tablones del muelle.
+        if(std::find(options.boundaryProfileMaterials.begin(),options.boundaryProfileMaterials.end(),materialName)!=options.boundaryProfileMaterials.end())
+            for(const auto& vertex:vertices)materialProfiles[materialName].push_back(vertex.Position);
         MeshMaterial material;
         if (mesh->mMaterialIndex < scene->mNumMaterials)
         {
@@ -233,7 +333,12 @@ private:
         const glm::vec2 tile = options.ground ? ZocaloTileSize(materialName) : glm::vec2(0);
         if (tile.x > 0.0f)
             for (auto& vertex : vertices) vertex.TexCoords = ProjectFloorUV(vertex.Position, vertex.Normal, tile);
-        meshes.emplace_back(vertices, indices, material, meshMin, meshMax, skin);
+        if(options.ground&&materialName=="LoD_0SG")AddBenches(vertices,indices,material,materialName);
+        else
+        {
+            const bool kiosk=options.ground&&(materialName=="Material.014"||materialName=="Material.004"||materialName=="Material.005"||materialName=="Material.007");
+            AddPart(vertices,indices,skin,material,materialName,kiosk?kioskTransform:glm::mat4(1));
+        }
     }
     GLuint LoadTexture(std::string relativePath)
     {

@@ -21,7 +21,7 @@ uniform sampler2D texture_diffuse1;
 uniform vec3 lightDirection;
 uniform vec3 ambientLight;
 uniform vec3 diffuseLight;
-uniform PointLight pointLights[8];
+uniform PointLight pointLights[12];
 uniform int pointLightCount;
 uniform vec4 pointLightRegion;
 void main()
@@ -40,7 +40,7 @@ void main()
     if (WorldPosition.x >= pointLightRegion.x && WorldPosition.z >= pointLightRegion.y &&
         WorldPosition.x <= pointLightRegion.z && WorldPosition.z <= pointLightRegion.w)
     {
-        for (int i = 0; i < pointLightCount; ++i)
+        for (int i = 0; i < min(pointLightCount,12); ++i)
         {
             vec3 delta = pointLights[i].position - WorldPosition;
             float distanceSquared = dot(delta, delta);

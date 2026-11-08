@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <fstream>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -26,10 +27,97 @@ class SkeletalAnimator
     std::vector<Clip> clips;
     std::vector<glm::mat4> palette;
     std::vector<glm::mat4> globalPose;
+    std::vector<glm::mat4> restGlobalPose;
+    struct ArmLimit {int upper,forearm,hand,chest,sign;glm::vec3 up,side,forward,elbowOffset,wristOffset,palm;};
+    std::vector<ArmLimit> armLimits;
+    struct {float back=-30,front=45,inward=12,outward=28,minFlex=6,maxFlex=100,clearance=.55f,handUp=.15f;} armSettings;
     std::unordered_map<std::string,std::pair<unsigned,float>> influenceStats;
     glm::mat4 inverseRoot = glm::mat4(1);
     int idle = -1, walk = -1, run = -1;
     float idleTime = 0.0f;
+
+    void InitializeArmLimits()
+    {
+        restGlobalPose.resize(nodes.size());
+        for(size_t i=0;i<nodes.size();++i)
+        {
+            const auto& n=nodes[i];const auto local=glm::translate(glm::mat4(1),n.p)*glm::mat4_cast(n.q)*glm::scale(glm::mat4(1),n.s);
+            restGlobalPose[i]=(n.parent<0?glm::mat4(1):restGlobalPose[n.parent])*local;
+        }
+        if(!nodeIds.count("UpperArm.L")||!nodeIds.count("UpperArm.R"))return;
+        std::ifstream input("Models/NinaRig/arm-limits.txt");
+        if(!(input>>armSettings.back>>armSettings.front>>armSettings.inward>>armSettings.outward>>armSettings.minFlex>>armSettings.maxFlex>>armSettings.clearance>>armSettings.handUp))
+            throw std::runtime_error("Falta el perfil obligatorio de limites anatomicos de la nina.");
+        const int chest=nodeIds.at("Chest"),neck=nodeIds.at("Neck");
+        const auto up=glm::normalize(glm::vec3(restGlobalPose[neck][3]-restGlobalPose[chest][3]));
+        auto side=glm::vec3(restGlobalPose[nodeIds.at("UpperArm.L")][3]-restGlobalPose[nodeIds.at("UpperArm.R")][3]);
+        side=glm::normalize(side-up*glm::dot(side,up));const auto forward=glm::normalize(glm::cross(side,up));
+        const auto inverseChest=glm::inverse(glm::mat3(restGlobalPose[chest]));
+        for(const char* suffix:{".L",".R"})
+        {
+            const int upper=nodeIds.at(std::string("UpperArm")+suffix),forearm=nodeIds.at(std::string("Forearm")+suffix),hand=nodeIds.at(std::string("Hand")+suffix);
+            const auto palm=glm::normalize(glm::inverse(glm::mat3(restGlobalPose[hand]))*
+                glm::vec3(restGlobalPose[hand][3]-restGlobalPose[forearm][3]));
+            armLimits.push_back({upper,forearm,hand,chest,suffix[1]=='L'?1:-1,inverseChest*up,inverseChest*side,inverseChest*forward,
+                nodes[forearm].p,nodes[hand].p,palm});
+        }
+    }
+    static glm::vec3 LimitElevation(glm::vec3 direction,const glm::vec3& up,float ceiling,const glm::vec3& fallback)
+    {
+        direction=glm::normalize(direction);const float y=glm::dot(direction,up);
+        if(y<=ceiling)return direction;
+        auto horizontal=direction-up*y;
+        if(glm::length(horizontal)<.00001f)horizontal=fallback;
+        return glm::normalize(horizontal)*std::sqrt(std::max(0.0f,1-ceiling*ceiling))+up*ceiling;
+    }
+    static void Redirect(glm::mat4& pose,glm::vec3 from,glm::vec3 to)
+    {
+        from=glm::normalize(from);to=glm::normalize(to);const float dot=glm::clamp(glm::dot(from,to),-1.0f,1.0f);
+        if(dot>.999999f)return;
+        glm::vec3 axis=glm::cross(from,to);glm::quat q;
+        if(dot<-.9999f)
+        {axis=glm::cross(from,glm::vec3(1,0,0));if(glm::length(axis)<.001f)axis=glm::cross(from,glm::vec3(0,0,1));q=glm::angleAxis(3.14159265359f,glm::normalize(axis));}
+        else q=glm::normalize(glm::quat(1+dot,axis.x,axis.y,axis.z));
+        const glm::vec3 pivot=glm::vec3(pose[3]);
+        pose=glm::translate(glm::mat4(1),pivot)*glm::mat4_cast(q)*glm::translate(glm::mat4(1),-pivot)*pose;
+    }
+    void ConstrainArm(int node)
+    {
+        for(const auto& arm:armLimits)
+        {
+            if(node!=arm.upper&&node!=arm.forearm&&node!=arm.hand)continue;
+            const auto chest=glm::mat3(globalPose[arm.chest]);
+            const auto up=glm::normalize(chest*arm.up),side=glm::normalize(chest*arm.side),forward=glm::normalize(chest*arm.forward);
+            auto& pose=globalPose[node];
+            if(node==arm.upper)
+            {
+                const auto direction=glm::normalize(glm::mat3(pose)*arm.elbowOffset);
+                const float pitch=glm::clamp(std::atan2(glm::dot(direction,forward),-glm::dot(direction,up)),glm::radians(armSettings.back),glm::radians(armSettings.front));
+                const float lateral=glm::clamp(std::asin(glm::clamp(arm.sign*glm::dot(direction,side),-1.0f,1.0f)),glm::radians(armSettings.inward),glm::radians(armSettings.outward));
+                const auto limited=(-up*std::cos(pitch)+forward*std::sin(pitch))*std::cos(lateral)+side*(arm.sign*std::sin(lateral));
+                Redirect(pose,direction,limited);
+            }
+            else if(node==arm.forearm)
+            {
+                const auto shoulder=glm::vec3(globalPose[arm.upper][3]),elbow=glm::vec3(pose[3]);
+                const auto upper=glm::normalize(elbow-shoulder),wrist=glm::mat3(pose)*arm.wristOffset;
+                auto direction=glm::normalize(wrist);
+                const float angle=std::acos(glm::clamp(glm::dot(upper,direction),-1.0f,1.0f));
+                const float limited=glm::clamp(angle,glm::radians(armSettings.minFlex),glm::radians(armSettings.maxFlex));
+                auto bend=direction-upper*glm::dot(upper,direction);
+                if(glm::length(bend)<.00001f)bend=forward-upper*glm::dot(upper,forward);
+                direction=upper*std::cos(limited)+glm::normalize(bend)*std::sin(limited);
+                const float maxY=glm::clamp((glm::dot(shoulder-elbow,up)-glm::length(elbow-shoulder)*armSettings.clearance)/glm::length(wrist),-.98f,.98f);
+                direction=LimitElevation(direction,up,maxY,forward);
+                Redirect(pose,wrist,direction);
+            }
+            else
+            {
+                const auto palm=glm::mat3(pose)*arm.palm;
+                Redirect(pose,palm,LimitElevation(palm,up,armSettings.handUp,forward));
+            }
+        }
+    }
 
     static glm::vec3 V(const aiVector3D& v) { return {v.x,v.y,v.z}; }
     static glm::quat Q(const aiQuaternion& q) { return glm::normalize(glm::quat(q.w,q.x,q.y,q.z)); }
@@ -66,14 +154,15 @@ class SkeletalAnimator
         return glm::normalize(glm::slerp(a.value,b.value,glm::clamp(
             (time-a.time)/std::max(0.000001f,b.time-a.time),0.0f,1.0f)));
     }
-    Node PoseNode(int node,int clip,float time) const
+    Node PoseNode(int node,int clip,float time,bool loop=true) const
     {
         Node result=nodes[node];
         if(clip<0) return result;
         const auto& c=clips[clip];
         const auto found=c.tracks.find(node);
         if(found==c.tracks.end()) return result;
-        time=std::fmod(std::max(0.0f,time),std::max(0.0001f,c.duration));
+        time=loop?std::fmod(std::max(0.0f,time),std::max(0.0001f,c.duration)):
+            glm::clamp(time,0.0f,c.duration);
         result.p=Sample(found->second.p,time,result.p);
         result.s=Sample(found->second.s,time,result.s);
         result.q=Sample(found->second.q,time,result.q);
@@ -129,6 +218,7 @@ public:
         if(bones.empty()||idle<0||walk<0||run<0)
             throw std::runtime_error("El FBX necesita huesos y clips Idle, Walk y Run.");
         palette.resize(bones.size(),glm::mat4(1));
+        InitializeArmLimits();
         Evaluate(0.0f,0.0f,0.0f);
     }
     std::vector<SkinVertex> Weights(const aiMesh* mesh) const
@@ -166,9 +256,15 @@ public:
         Evaluate(phase,gait,running);
     }
     void Reset() { idleTime=0.0f; Evaluate(0.0f,0.0f,0.0f); }
-    void Evaluate(float phase,float gait,float running)
+    float Duration(const std::string& name) const{return clips.at(FindClip(name)).duration;}
+    bool HasClip(const std::string& name) const{return FindClip(name,false)>=0;}
+    void UpdateLayered(float dt,float phase,float gait,float running,const std::string& clip,float time,float weight)
+    {idleTime+=dt;Evaluate(phase,gait,running,clip,time,weight);}
+    void Evaluate(float phase,float gait,float running,const std::string& overlay="",float overlayTime=0,float overlayWeight=0)
     {
         gait=glm::clamp(gait,0.0f,1.0f);running=glm::clamp(running,0.0f,1.0f);
+        overlayWeight=glm::clamp(overlayWeight,0.0f,1.0f);
+        const int overlayId=overlay.empty()?-1:FindClip(overlay);
         const float cycle=phase/6.28318530718f;
         globalPose.resize(nodes.size());
         auto& global=globalPose;
@@ -176,16 +272,35 @@ public:
         {
             const Node a=PoseNode(i,idle,idleTime),b=PoseNode(i,walk,cycle*clips[walk].duration),
                 c=PoseNode(i,run,cycle*clips[run].duration);
-            const glm::vec3 p=glm::mix(a.p,glm::mix(b.p,c.p,running),gait);
-            const glm::vec3 s=glm::mix(a.s,glm::mix(b.s,c.s,running),gait);
-            const glm::quat q=glm::normalize(glm::slerp(a.q,glm::slerp(b.q,c.q,running),gait));
+            glm::vec3 p=glm::mix(a.p,glm::mix(b.p,c.p,running),gait);
+            glm::vec3 s=glm::mix(a.s,glm::mix(b.s,c.s,running),gait);
+            glm::quat q=glm::normalize(glm::slerp(a.q,glm::slerp(b.q,c.q,running),gait));
+            if(overlayId>=0)
+            {
+                const Node action=PoseNode(i,overlayId,overlayTime,false);
+                p=glm::mix(p,action.p,overlayWeight);s=glm::mix(s,action.s,overlayWeight);
+                q=glm::normalize(glm::slerp(q,action.q,overlayWeight));
+            }
             const glm::mat4 local=glm::translate(glm::mat4(1),p)*glm::mat4_cast(q)*glm::scale(glm::mat4(1),s);
             global[i]=(nodes[i].parent<0?glm::mat4(1):global[nodes[i].parent])*local;
+            // Ultima barrera, DESPUES de mezclar clips: tambien limita poses
+            // interpoladas, overlays y cualquier accion futura del personaje.
+            ConstrainArm(i);
         }
         for(size_t i=0;i<bones.size();++i)
             palette[i]=inverseRoot*global[bones[i].node]*bones[i].offset;
     }
     const std::vector<glm::mat4>& Palette() const { return palette; }
+    glm::vec3 JointPosition(const std::string& name) const
+    {return glm::vec3(inverseRoot*globalPose.at(nodeIds.at(name))*glm::vec4(0,0,0,1));}
+    bool HasArmSafety() const{return armLimits.size()==2;}
+    float JointTurnDegrees(const std::string& name) const
+    {
+        const int id=nodeIds.at(name);
+        const auto current=glm::mat3(inverseRoot*globalPose[id]),rest=glm::mat3(inverseRoot*restGlobalPose[id]);
+        const auto forward=glm::normalize(current*glm::inverse(rest)*glm::vec3(0,0,1));
+        return glm::degrees(std::atan2(forward.x,forward.z));
+    }
     size_t BoneCount() const { return bones.size(); }
     size_t ClipCount() const { return clips.size(); }
     bool HasDeformingJoint(const std::string& name) const
@@ -199,5 +314,18 @@ public:
         const glm::vec3 b=glm::vec3(globalPose.at(nodeIds.at(joint))[3]);
         const glm::vec3 c=glm::vec3(globalPose.at(nodeIds.at(lower))[3]);
         return glm::degrees(std::acos(glm::clamp(glm::dot(glm::normalize(b-a),glm::normalize(c-b)),-1.0f,1.0f)));
+    }
+private:
+    int FindClip(std::string name,bool required=true) const
+    {
+        std::transform(name.begin(),name.end(),name.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
+        for(size_t i=0;i<clips.size();++i)
+        {
+            std::string candidate=clips[i].name;
+            std::transform(candidate.begin(),candidate.end(),candidate.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
+            if(candidate.find(name)!=std::string::npos)return static_cast<int>(i);
+        }
+        if(required)throw std::runtime_error("Falta el clip de animacion: "+name);
+        return -1;
     }
 };

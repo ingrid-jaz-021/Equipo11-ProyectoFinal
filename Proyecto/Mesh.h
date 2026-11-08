@@ -27,9 +27,9 @@ class Mesh
 public:
     Mesh(const std::vector<Vertex>& vertices, const std::vector<GLuint>& indices,
         const MeshMaterial& material, const glm::vec3& minBounds, const glm::vec3& maxBounds,
-        const std::vector<SkinVertex>& skin = {})
+        const std::vector<SkinVertex>& skin = {},const glm::mat4& localTransform=glm::mat4(1))
         : material(material), minBounds(minBounds), maxBounds(maxBounds),
-        indexCount(static_cast<GLsizei>(indices.size()))
+        indexCount(static_cast<GLsizei>(indices.size())),localTransform(localTransform)
     {
         glGenVertexArrays(1, &VAO);
         glGenBuffers(1, &VBO);
@@ -65,7 +65,7 @@ public:
     Mesh& operator=(const Mesh&) = delete;
     Mesh(Mesh&& other) noexcept : material(other.material), minBounds(other.minBounds),
         maxBounds(other.maxBounds), indexCount(other.indexCount),
-        VAO(other.VAO), VBO(other.VBO), EBO(other.EBO), skinVBO(other.skinVBO)
+        VAO(other.VAO), VBO(other.VBO), EBO(other.EBO), skinVBO(other.skinVBO),localTransform(other.localTransform)
     {
         other.VAO = other.VBO = other.EBO = 0;
         other.skinVBO = 0;
@@ -79,6 +79,7 @@ public:
             minBounds = other.minBounds; maxBounds = other.maxBounds;
             VAO = other.VAO; VBO = other.VBO; EBO = other.EBO;
             skinVBO = other.skinVBO;
+            localTransform=other.localTransform;
             other.VAO = other.VBO = other.EBO = 0;
             other.skinVBO = 0;
         }
@@ -96,6 +97,7 @@ public:
         }
         return true;
     }
+    const glm::mat4& LocalTransform() const{return localTransform;}
 
     void Draw(const Shader& shader) const
     {
@@ -115,6 +117,7 @@ private:
     GLsizei indexCount = 0;
     GLuint VAO = 0, VBO = 0, EBO = 0;
     GLuint skinVBO = 0;
+    glm::mat4 localTransform=glm::mat4(1);
     void Release()
     {
         if (skinVBO) glDeleteBuffers(1, &skinVBO);

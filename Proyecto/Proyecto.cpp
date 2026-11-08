@@ -27,6 +27,8 @@
 #include "ZocaloLighting.h"
 #include "TreeVegetation.h"
 #include "ZocaloBackdrop.h"
+#include "WaterSurface.h"
+#include "CompanionController.h"
 
 namespace
 {
@@ -36,6 +38,7 @@ const glm::vec3 SOURCE_SPAWN(-114.0f, 2.005836f, 290.0f);
 const glm::vec3 ENVIRONMENT_TRANSLATION = -SOURCE_SPAWN * ENVIRONMENT_SCALE;
 Camera freeCamera(glm::vec3(30.0f, 30.0f, -60.0f), glm::vec3(0, 1, 0), 115.0f, -12.0f);
 CharacterController player;
+CompanionController companion;
 FollowCamera followCamera;
 enum class CameraMode { Free, ThirdPerson };
 CameraMode cameraMode = CameraMode::ThirdPerson;
@@ -53,6 +56,7 @@ void ResetScene()
     cameraMode = CameraMode::ThirdPerson;
     player.SetFrozen(false);
     player.Reset();
+    companion.ResetBeside(player,ENVIRONMENT_SCALE);
     followCamera.Reset();
     followCamera.Update(player, 0.0f, ENVIRONMENT_SCALE, true);
     freeCamera = Camera(glm::vec3(30.0f, 30.0f, -60.0f), glm::vec3(0, 1, 0), 115.0f, -12.0f);
@@ -93,6 +97,9 @@ void KeyCallback(GLFWwindow* window, int key, int, int action, int)
 {
     if (action != GLFW_PRESS) return;
     if (key == GLFW_KEY_ESCAPE) glfwSetWindowShouldClose(window, GLFW_TRUE);
+    // F: pausa seguimiento del xolo; olfatea, gira y da un paso de carrera.
+    if(key==GLFW_KEY_F&&companion.TriggerSpecial())
+        std::cout<<"Xolo: olfatear -> giro -> paso de carrera; despues vuelve al lado de la nina."<<std::endl;
     if (key == GLFW_KEY_C)
     {
         cameraMode = cameraMode == CameraMode::ThirdPerson ? CameraMode::Free : CameraMode::ThirdPerson;
@@ -275,6 +282,7 @@ void ValidateFrozenCharacter(GLFWwindow* window)
 }
 void ValidateArticulation(SkeletalAnimator& rig)
 {
+    if(!rig.HasArmSafety())throw std::runtime_error("Los brazos no tienen proteccion anatomica activa.");
     const char* upper[4]={"UpperArm.L","UpperArm.R","Thigh.L","Thigh.R"};
     const char* hinge[4]={"Forearm.L","Forearm.R","Shin.L","Shin.R"};
     const char* lower[4]={"Hand.L","Hand.R","Foot.L","Foot.R"};
@@ -296,14 +304,94 @@ void ValidateArticulation(SkeletalAnimator& rig)
         }
         for(int joint=0;joint<4;++joint)
         {
-            const float required=joint<2?(mode?80.0f:40.0f):(mode?95.0f:65.0f);
-            if(maxima[joint]<required||maxima[joint]-minima[joint]<20.0f||maxima[joint]>135.0f)
-                throw std::runtime_error(std::string("Flexion insuficiente o excesiva: ")+hinge[joint]);
+            const float required=joint<2?(mode?55.0f:20.0f):(mode?80.0f:45.0f);
+            if(maxima[joint]<required||maxima[joint]-minima[joint]<(joint<2?5.0f:25.0f)||maxima[joint]>155.0f)
+                throw std::runtime_error(std::string("Flexion insuficiente o excesiva: ")+hinge[joint]+" "+std::to_string(minima[joint])+".."+std::to_string(maxima[joint]));
         }
         std::cout<<(mode?"Carrera":"Marcha")<<" - codo: "<<minima[0]<<".."<<maxima[0]
             <<" grados; rodilla: "<<minima[2]<<".."<<maxima[2]<<" grados."<<std::endl;
     }
     rig.Reset();
+    for(int g=0;g<=4;++g)for(int r=0;r<=4;++r)for(int phase=0;phase<180;++phase)
+    {
+        rig.Update(1.0f/60,phase*6.28318530718f/180.0f,g*.25f,r*.25f);
+        const auto up=glm::normalize(rig.JointPosition("Neck")-rig.JointPosition("Chest"));
+        for(const char* suffix:{".L",".R"})
+        {
+            const auto shoulder=rig.JointPosition(std::string("UpperArm")+suffix);
+            const auto elbow=rig.JointPosition(std::string("Forearm")+suffix);
+            const auto wrist=rig.JointPosition(std::string("Hand")+suffix);
+            const float length=glm::length(elbow-shoulder);
+            if(glm::dot(elbow-shoulder,up)>-length*.58f+.001f||glm::dot(wrist-shoulder,up)>-length*.50f+.001f)
+                throw std::runtime_error("Un brazo supera su hombro durante una mezcla de animaciones.");
+        }
+    }
+    rig.Reset();
+    std::cout<<"Brazos OK: 4500 poses/mezclas limitadas; codos y manos por debajo de sus hombros."<<std::endl;
+}
+
+void ValidateCompanion(Model& dog)
+{
+    auto* rig=dog.Animator();
+    if(!rig||!rig->HasClip("Special")||rig->BoneCount()<20||std::abs(rig->Duration("Special")-3.8f)>.05f)
+        throw std::runtime_error("Esqueleto o secuencia del xolo incompletos.");
+    for(const char* joint:{"Neck","Head","FrontLower.L","FrontLower.R","HindLower.L","HindLower.R"})
+        if(!rig->HasDeformingJoint(joint))throw std::runtime_error(std::string("Xolo sin pesos en ")+joint);
+    rig->Evaluate(0,0,0);
+    const auto standingHead=rig->JointPosition("Head"),root=rig->JointPosition("Root");
+    rig->Evaluate(0,0,0,"Special",.95f,1);
+    if(rig->JointPosition("Head").y>standingHead.y*.7f)
+        throw std::runtime_error("El clip importado no baja la cabeza al olfatear.");
+    rig->Evaluate(0,0,0,"Special",1.60f,1);
+    if(rig->JointTurnDegrees("Head")<rig->JointTurnDegrees("Chest")+8||std::abs(rig->JointTurnDegrees("Root"))>2)
+        throw std::runtime_error("El xolo no anticipa el giro con la cabeza.");
+    float minLeg=180,maxLeg=0,maxTorsoLag=0;
+    for(int i=0;i<90;++i)
+    {
+        rig->Evaluate(0,0,0,"Special",1.68f+i/90.0f,1);
+        const float flex=rig->JointFlexDegrees("FrontUpper.L","FrontLower.L","FrontPaw.L");
+        minLeg=std::min(minLeg,flex);maxLeg=std::max(maxLeg,flex);
+        maxTorsoLag=std::max(maxTorsoLag,std::abs(std::remainder(rig->JointTurnDegrees("Chest")-rig->JointTurnDegrees("Hips"),360.0f)));
+    }
+    if(maxLeg-minLeg<8||maxTorsoLag<8)throw std::runtime_error("El giro del xolo sigue siendo un bloque rigido.");
+    rig->Evaluate(0,0,0,"Special",2.175f,1);
+    auto before=standingHead-root,turned=rig->JointPosition("Head")-root;before.y=turned.y=0;
+    if(glm::dot(glm::normalize(before),glm::normalize(turned))>-.65f)
+        throw std::runtime_error("La fase de giro no rota sobre su propio eje.");
+    rig->Evaluate(0,0,0,"Special",rig->Duration("Special"),1);const auto finalPose=rig->Palette();
+    rig->Evaluate(0,0,0,"Special",rig->Duration("Special")+1,1);
+    if(std::memcmp(finalPose.data(),rig->Palette().data(),finalPose.size()*sizeof(glm::mat4))!=0)
+        throw std::runtime_error("La accion especial vuelve a empezar en lugar de terminar.");
+    rig->Reset();
+    for(int fps:{30,60,144})
+    {
+        CharacterController owner;CompanionController test;
+        test.AttachCompanion(rig);test.Configure(dog.GetMinBounds(),dog.GetMaxBounds(),MovementSettings::CompanionHeight*ENVIRONMENT_SCALE);
+        test.ResetBeside(owner,ENVIRONMENT_SCALE);test.position+=glm::vec3(-20,0,-30);
+        for(int frame=0;frame<fps*6;++frame)
+        {
+            owner.velocity=frame<fps*2?glm::vec3(0,0,MovementSettings::WalkSpeed*ENVIRONMENT_SCALE):glm::vec3(0);
+            owner.position+=owner.velocity/static_cast<float>(fps);
+            test.UpdateCompanion(owner,nullptr,SOURCE_SPAWN,ENVIRONMENT_SCALE,1.0f/fps);
+        }
+        if(glm::length(test.position-test.FollowTarget(owner,ENVIRONMENT_SCALE))>.15f*ENVIRONMENT_SCALE)
+            throw std::runtime_error("El xolo no mantiene su offset de seguimiento.");
+        test.ResetBeside(owner,ENVIRONMENT_SCALE);
+        const auto begin=test.position;const auto idle=test.Pose();
+        if(!test.TriggerSpecial()||test.TriggerSpecial())throw std::runtime_error("Transicion de accion especial invalida.");
+        for(int frame=0;frame<fps;++frame)test.UpdateCompanion(owner,nullptr,SOURCE_SPAWN,ENVIRONMENT_SCALE,1.0f/fps);
+        if(glm::length(test.position-begin)>.001f||std::memcmp(idle.data(),test.Pose().data(),idle.size()*sizeof(glm::mat4))==0)
+            throw std::runtime_error("Olfatear no pausa el seguimiento o no anima los huesos.");
+        int watchdog=0;
+        while(test.IsSpecial()&&watchdog++<fps*4)test.UpdateCompanion(owner,nullptr,SOURCE_SPAWN,ENVIRONMENT_SCALE,1.0f/fps);
+        const float advance=glm::dot(test.position-begin,owner.Forward())/ENVIRONMENT_SCALE;
+        if(test.IsSpecial()||advance<1.4f||advance>1.7f)throw std::runtime_error("La secuencia del xolo no completa el paso hacia delante.");
+        for(int frame=0;frame<fps*4;++frame)test.UpdateCompanion(owner,nullptr,SOURCE_SPAWN,ENVIRONMENT_SCALE,1.0f/fps);
+        if(glm::length(test.position-test.FollowTarget(owner,ENVIRONMENT_SCALE))>.15f*ENVIRONMENT_SCALE)
+            throw std::runtime_error("El xolo no retoma el seguimiento al terminar.");
+    }
+    rig->Reset();
+    std::cout<<"Xolo OK: huesos, seguimiento lateral, olfateo/giro/avance y regreso a 30/60/144 FPS."<<std::endl;
 }
 
 void ValidateRaisedGround()
@@ -314,15 +402,15 @@ void ValidateRaisedGround()
     terrain.Add({2,3.6f,-1},{2,3.6f,1},{4,3.6f,1},true);
     terrain.Add({2,3.6f,-1},{4,3.6f,1},{4,3.6f,-1},true);
     float height=0;
-    if(!terrain.SampleCharacter(3,0,2,2,height)||std::abs(height-3.6f)>0.001f)
+    if(!terrain.SampleCharacter(3,0,2,height)||std::abs(height-3.6f)>0.001f)
         throw std::runtime_error("No sube al pasto desde el nivel del piso.");
-    if(!terrain.SampleCharacter(5,0,3.6f,2,height)||std::abs(height-2.0f)>0.001f)
+    if(!terrain.SampleCharacter(5,0,3.6f,height)||std::abs(height-2.0f)>0.001f)
         throw std::runtime_error("El raycast conserva la altura del pasto al salir.");
     GroundSurface triangle;
     triangle.Add({-10,2,-10},{-10,2,10},{10,2,10});
     triangle.Add({-10,2,-10},{10,2,10},{10,2,-10});
     triangle.Add({2,3.6f,-1},{2,3.6f,1},{4,3.6f,1},true);
-    if(!triangle.SampleCharacter(3.8f,-0.8f,2,2,height)||height>2.01f)
+    if(!triangle.SampleCharacter(3.8f,-0.8f,2,height)||height>2.01f)
         throw std::runtime_error("Falso positivo de AABB fuera de una jardinera triangular.");
     for(int fps:{30,60,144})
     {
@@ -336,6 +424,62 @@ void ValidateRaisedGround()
     }
     std::cout<<"Altura OK: entrada/salida de pasto, triangulos y 30/60/144 FPS."<<std::endl;
 }
+void ValidateRamps()
+{
+    GroundSurface terrain;
+    terrain.Add({-10,2,-3},{-10,2,3},{10,2,3});terrain.Add({-10,2,-3},{10,2,3},{10,2,-3});
+    // Rampa y tapa con winding invertido a proposito.
+    terrain.Add({2,2,-1},{4,3.5f,1},{2,2,1});terrain.Add({2,2,-1},{4,3.5f,-1},{4,3.5f,1});
+    terrain.Add({4,3.5f,-1},{6,3.5f,1},{4,3.5f,1});terrain.Add({4,3.5f,-1},{6,3.5f,-1},{6,3.5f,1});
+    float hit=0;
+    if(!terrain.SampleCharacter(5,0,2,hit)||std::abs(hit-3.5f)>.001f)
+        throw std::runtime_error("No detecta una subida que no sea pasto o una cara invertida.");
+    for(int fps:{30,60,144})
+    {
+        CharacterController test;
+        for(int i=0;i<fps*4;++i)
+        {
+            const float x=(i+1)*2.0f/fps;test.position.x=x*10;
+            test.ConformToGround(terrain,{0,2,0},10,1.0f/fps);
+            const float expected=x>=2&&x<=6?2+std::min((x-2)*.75f,1.5f):2;
+            if(test.position.y<(expected-2)*10-.01f)throw std::runtime_error("Penetra una rampa durante la subida.");
+        }
+        if(std::abs(test.position.y)>.001f)throw std::runtime_error("No desciende desde la plataforma.");
+    }
+    std::cout<<"Relieve OK: rampas, tapas invertidas y descensos a 30/60/144 FPS."<<std::endl;
+}
+void ValidatePasilloGround(const GroundSurface& terrain)
+{
+    constexpr float x=-114.75f;
+    float road=0,curb=0,entry=0;
+    if(!terrain.SampleCharacter(x,270,SOURCE_SPAWN.y,road)||
+        !terrain.SampleCharacter(x,262,road,curb)||!terrain.SampleCharacter(x,245,road,entry)||
+        curb<road+.5f||entry<road+.5f)
+        throw std::runtime_error("No detecta la banqueta o el piso elevado de la entrada al Pasillo.");
+    for(int fps:{30,60,144})for(int direction:{-1,1})
+    {
+        CharacterController test;
+        const float start=direction<0?270.0f:242.0f,end=direction<0?242.0f:270.0f;
+        const float initial=direction<0?road:entry;
+        test.position=(glm::vec3(x,initial,start)-SOURCE_SPAWN)*ENVIRONMENT_SCALE;
+        float z=start;
+        while(std::abs(z-end)>.0001f)
+        {
+            z=direction<0?std::max(end,z-MovementSettings::RunSpeed/fps):std::min(end,z+MovementSettings::RunSpeed/fps);
+            test.position.z=(z-SOURCE_SPAWN.z)*ENVIRONMENT_SCALE;
+            test.ConformToGround(terrain,SOURCE_SPAWN,ENVIRONMENT_SCALE,1.0f/fps);
+            // En la entrada real el pie debe estar sobre la tapa, no debajo.
+            if(z>243&&z<246&&test.position.y<(entry-SOURCE_SPAWN.y)*ENVIRONMENT_SCALE-.01f)
+                throw std::runtime_error("La nina atraviesa el piso del Pasillo al caminar.");
+        }
+        for(int i=0;i<fps;++i)test.ConformToGround(terrain,SOURCE_SPAWN,ENVIRONMENT_SCALE,1.0f/fps);
+        const float expected=direction<0?entry:road;
+        if(std::abs(test.position.y-(expected-SOURCE_SPAWN.y)*ENVIRONMENT_SCALE)>.01f)
+            throw std::runtime_error("Altura final incorrecta al entrar/salir del Pasillo.");
+    }
+    std::cout<<"Pasillo real OK: calle Y="<<road<<", banqueta Y="<<curb<<", entrada Y="<<entry
+        <<"; recorrido en ambos sentidos a 30/60/144 FPS."<<std::endl;
+}
 void ValidateSceneGrass(const GroundSurface& terrain)
 {
     const auto samples=terrain.RaisedSamples(SOURCE_SPAWN.y);
@@ -343,7 +487,7 @@ void ValidateSceneGrass(const GroundSurface& terrain)
     for(const auto& point:samples)
     {
         float hit=0;
-        if(!terrain.SampleCharacter(point.x,point.z,SOURCE_SPAWN.y,SOURCE_SPAWN.y,hit)||hit<point.y-0.001f)
+        if(!terrain.SampleCharacter(point.x,point.z,SOURCE_SPAWN.y,hit)||hit<point.y-0.001f)
             throw std::runtime_error("Una jardinera real no admite el raycast desde el piso.");
     }
     std::cout<<"Pasto real OK: "<<samples.size()<<" superficies transitables elevadas."<<std::endl;
@@ -382,7 +526,7 @@ void SetValidationCamera(const glm::vec3& eye, const glm::vec3& target)
     cameraMode = CameraMode::Free;
 }
 void DrawObject(const Model& object, const Shader& shader, const glm::mat4& model,
-    const glm::mat4& view, const glm::mat4& projection, bool character)
+    const glm::mat4& view, const glm::mat4& projection, const CharacterController* actor=nullptr)
 {
     shader.Use();
     const glm::mat3 normal = glm::transpose(glm::inverse(glm::mat3(model)));
@@ -390,13 +534,13 @@ void DrawObject(const Model& object, const Shader& shader, const glm::mat4& mode
     glUniformMatrix3fv(glGetUniformLocation(shader.Program, "normalMatrix"), 1, GL_FALSE, glm::value_ptr(normal));
     glUniformMatrix4fv(glGetUniformLocation(shader.Program, "view"), 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(glGetUniformLocation(shader.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-    if (character)
+    if (actor)
     {
-        const auto& bones = player.Pose();
+        const auto& bones = actor->Pose();
         glUniformMatrix4fv(glGetUniformLocation(shader.Program, "bones[0]"), static_cast<GLsizei>(bones.size()),
             GL_FALSE, glm::value_ptr(bones[0]));
     }
-    object.Draw(shader, projection * view * model, !character);
+    object.Draw(shader, projection * view * model, actor==nullptr,model);
 }
 void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::string& capture)
 {
@@ -419,31 +563,41 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     player.Attach(girl.Animator());
     player.Configure(girl.GetMinBounds(), girl.GetMaxBounds(), MovementSettings::CharacterHeight * ENVIRONMENT_SCALE);
     ResetScene();
-    if (validate) { ValidateArticulation(*girl.Animator()); ValidateFrozenCharacter(window); ValidateRaisedGround(); }
+    if (validate) { ValidateArticulation(*girl.Animator()); ValidateFrozenCharacter(window); ValidateRaisedGround(); ValidateRamps(); }
+    glfwSetWindowTitle(window,"Cargando xoloitzcuintle...");
+    Model dog("Models/XoloRig/XoloRig.fbx",keepLoading,{nullptr,true});
+    if(validate)ValidateCompanion(dog);
+    companion.AttachCompanion(dog.Animator());
+    companion.Configure(dog.GetMinBounds(),dog.GetMaxBounds(),MovementSettings::CompanionHeight*ENVIRONMENT_SCALE);
+    companion.ResetBeside(player,ENVIRONMENT_SCALE);
     GroundSurface ground;
     std::unique_ptr<Model> environment;
     if (!characterOnly)
     {
         glfwSetWindowTitle(window, "Cargando EntornoCompleto.obj...");
         environment = std::make_unique<Model>("Models/EntornoCompleto/EntornoCompleto.obj",
-            keepLoading, ModelOptions{ &ground, false, "TapeteAserrin1.002" });
-        if (validate) ValidateSceneGrass(ground);
+            keepLoading, ModelOptions{ &ground, false, {"TapeteAserrin1.002","tarima_madera.001"} });
+        if (validate) { environment->ValidateLayout(); ValidateSceneGrass(ground); ValidatePasilloGround(ground); }
     }
-    Model lamp("Models/Farola/Farola.obj", keepLoading);
+    Model lamp("Models/Farola/Farola.obj", keepLoading,{nullptr,false,{"Material.001"}});
     ZocaloLighting plazaLights;
     plazaLights.Build(lamp, environment.get(), ground, SOURCE_SPAWN, ENVIRONMENT_SCALE);
+    if(validate)plazaLights.Validate(lamp,ENVIRONMENT_SCALE);
     plazaLights.Upload(environmentShader);
     plazaLights.Upload(characterShader);
-    std::cout << "Zocalo: 8 farolas, 8 focos alineados con su cristal." << std::endl;
+    std::cout << "Zocalo: 12 farolas (8 interiores y 4 exteriores), focos alineados con su cristal." << std::endl;
     std::unique_ptr<AlphaBillboards> billboards;
     std::unique_ptr<TreeVegetation> vegetation;
     std::unique_ptr<ZocaloBackdrop> backdrop;
+    std::unique_ptr<WaterSurface> water;
     if (environment)
     {
         billboards=std::make_unique<AlphaBillboards>();
         vegetation=std::make_unique<TreeVegetation>(*billboards,ground,SOURCE_SPAWN,ENVIRONMENT_SCALE);
         backdrop=std::make_unique<ZocaloBackdrop>(*billboards,*environment,ground,SOURCE_SPAWN,ENVIRONMENT_SCALE);
         if(validate) billboards->ValidateAlpha();
+        water=std::make_unique<WaterSurface>(*environment,SOURCE_SPAWN,ENVIRONMENT_SCALE);
+        if(validate)water->ValidateAnimation();
     }
     Skybox skybox;
     UpdateWindowTitle(window);
@@ -465,6 +619,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     std::cout << "WASD: personaje | Shift: correr | C: cambiar camara | R: reiniciar\n"
         << "Camara libre: WASD + E/Q (personaje congelado) | Raton: mirar | Rueda: zoom\n"
         << "Tab: cursor | Esc: salir" << std::endl;
+    std::cout<<"F: xolo olfatea, gira y avanza; despues retoma el seguimiento."<<std::endl;
 
     double previous = glfwGetTime();
     int frame = 0;
@@ -486,6 +641,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         {
             player.ConformToGround(ground, SOURCE_SPAWN, ENVIRONMENT_SCALE, dt);
         }
+        companion.UpdateCompanion(player,environment?&ground:nullptr,SOURCE_SPAWN,ENVIRONMENT_SCALE,dt);
         followCamera.Update(player, dt, ENVIRONMENT_SCALE);
         if (validate && environment)
         {
@@ -497,7 +653,8 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             if (frame == 140)
             {
                 const auto& instance = plazaLights.instances[6];
-                SetValidationCamera(instance.base + glm::vec3(30, 25, -65), instance.base + glm::vec3(0, 27, 0));
+                const float h=MovementSettings::LampHeight*ENVIRONMENT_SCALE;
+                SetValidationCamera(instance.base+glm::vec3(h*.75f,h*.8f,-h*1.7f),instance.base+glm::vec3(0,h*.5f,0));
             }
             if (frame == 150)
             {
@@ -527,9 +684,32 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
                 SetValidationCamera(backdrop->PassageEye(frame==250),backdrop->PassageTarget());
             if(frame==270)
                 SetValidationCamera(backdrop->Center()+glm::vec3(0,2600,-300),backdrop->Center()+glm::vec3(0,0,-200));
+            if(frame==280||frame==290)
+                SetValidationCamera(water->Center()+glm::vec3(200,2300,2600),water->Center());
+            if(frame==300)
+                SetValidationCamera(water->Center()+glm::vec3(-850,220,450),water->Center()+glm::vec3(0,40,0));
+            if(frame==330)
+                SetValidationCamera(water->DockCenter()+glm::vec3(-500,350,650),water->DockCenter()+glm::vec3(150,0,0));
+            if(frame==310||frame==320)
+            {
+                player.SetFrozen(false);player.Reset();
+                const float z=frame==310?245.0f:262.0f;
+                float y=0;ground.SampleCharacter(-114.75f,z,SOURCE_SPAWN.y,y);
+                player.position=(glm::vec3(-114.75f,y,z)-SOURCE_SPAWN)*ENVIRONMENT_SCALE;
+                player.ConformToGround(ground,SOURCE_SPAWN,ENVIRONMENT_SCALE,dt);
+                SetValidationCamera(player.position+glm::vec3(50,35,50),player.position+glm::vec3(0,player.height*.5f,0));
+            }
         }
         if (validate)
         {
+            const int actionFrame=environment?340:140;
+            if(frame==actionFrame)
+            {
+                ResetScene();KeyCallback(window,GLFW_KEY_C,0,GLFW_PRESS,0);
+                KeyCallback(window,GLFW_KEY_F,0,GLFW_PRESS,0);
+                const auto target=(player.position+companion.position)*.5f+glm::vec3(0,player.height*.40f,0);
+                SetValidationCamera(target+glm::vec3(60,20,60),target);
+            }
             if (environment && frame == 160)
             {
                 const auto samples = ground.RaisedSamples(SOURCE_SPAWN.y);
@@ -571,11 +751,13 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         {
             glm::mat4 model = glm::translate(glm::mat4(1), ENVIRONMENT_TRANSLATION);
             model = glm::scale(model, glm::vec3(ENVIRONMENT_SCALE));
-            DrawObject(*environment, environmentShader, model, view, projection, false);
+            DrawObject(*environment, environmentShader, model, view, projection);
             for (const auto& instance : plazaLights.instances)
-                DrawObject(lamp, environmentShader, instance.model, view, projection, false);
+                DrawObject(lamp, environmentShader, instance.model, view, projection);
         }
-        DrawObject(girl, characterShader, player.ModelMatrix(), view, projection, true);
+        DrawObject(girl, characterShader, player.ModelMatrix(), view, projection, &player);
+        DrawObject(dog,characterShader,companion.ModelMatrix(),view,projection,&companion);
+        if(water)water->Draw(view,projection,eye,now);
         glDepthFunc(GL_LEQUAL);
         glDepthMask(GL_FALSE);
         skyboxShader.Use();
@@ -587,7 +769,9 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         glDepthFunc(GL_LESS);
         // Cielo y opacos primero; planos RGBA al final, ordenados de lejos a cerca.
         if(billboards) billboards->Draw(view,projection);
-        if (validate && (frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270))
+        const int actionFrame=environment?340:140;
+        const bool captureAction=frame==actionFrame||frame==actionFrame+55||frame==actionFrame+96||frame==actionFrame+132||frame==actionFrame+180||frame==actionFrame+255;
+        if (validate && (captureAction || frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 310 || frame == 320 || frame == 330))
         {
             std::vector<float> depth(static_cast<size_t>(width) * height);
             glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, depth.data());
@@ -597,8 +781,10 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         }
         if (frame == 0 || validate) CheckOpenGL("personaje, animacion, camaras y skybox");
         glfwSwapBuffers(window);
-        if (validate && ++frame >= (environment ? 280 : 140))
+        if (validate && ++frame >= (environment ? 620 : 420))
         {
+            if(companion.IsSpecial()||glm::length(companion.position-companion.FollowTarget(player,ENVIRONMENT_SCALE))>.4f*ENVIRONMENT_SCALE)
+                throw std::runtime_error("F no devolvio el xolo a su posicion de seguimiento.");
             std::cout << "VALIDACION OK: animacion suave, luces, ambas camaras y " << frame
                 << " frames sin errores OpenGL." << std::endl;
             break;

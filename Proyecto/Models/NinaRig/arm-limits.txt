@@ -1,0 +1,4 @@
+-30 45 12 28 6 100 0.55 0.15
+# pitch min/max, abduccion min/max, codo min/max (grados),
+# separacion vertical muneca/hombro en longitudes de humero, elevacion maxima de mano.
+# Perfil compartido por Blender y la proteccion final del animador C++.
