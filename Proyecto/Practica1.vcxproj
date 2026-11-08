@@ -32,6 +32,7 @@
     <ClInclude Include="Camera.h" />
     <ClInclude Include="ZocaloLighting.h" />
     <ClInclude Include="CharacterController.h" />
+    <ClInclude Include="CompanionController.h" />
     <ClInclude Include="GroundSurface.h" />
     <ClInclude Include="UnicodeIO.h" />
     <ClInclude Include="Mesh.h" />
@@ -43,7 +44,15 @@
     <None Include="Models\NinaRig\NinaRig.fbx" />
     <None Include="Models\NinaRig\NinaRig.glb" />
     <None Include="Models\NinaRig\NinaRig.blend" />
+    <None Include="Models\NinaRig\arm-limits.txt" />
     <None Include="tools\build_nina_rig.py" />
+    <None Include="tools\mocap_retarget.py" />
+    <None Include="tools\build_xolo_rig.py" />
+    <None Include="Models\XoloRig\XoloRig.fbx" />
+    <None Include="Models\XoloRig\XoloRig.glb" />
+    <None Include="Models\XoloRig\XoloRig.blend" />
+    <None Include="Models\XoloRig\textures\xolo_skin.png" />
+    <None Include="Models\XoloRig\textures\xolo_features.jpg" />
     <None Include="images\Arbol_RGBA.png" />
     <None Include="images\Casa1.png" />
     <None Include="images\Casa2.png" />

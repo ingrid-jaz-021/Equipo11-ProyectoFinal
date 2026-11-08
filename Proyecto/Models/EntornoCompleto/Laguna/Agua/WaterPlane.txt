@@ -2,3 +2,5 @@
 # minX minZ maxX maxZ ancho-de-repeticion-UV (unidades fuente).
 # Limites medidos en None.001 de Lago(Lag).obj. Solo se necesita este plano,
 # no volver a importar los 348 MB que tambien contienen toda la escena duplicada.
+# WaterSurface une estos limites con el perfil real del muelle tarima_madera.001
+# y recalcula translate/scale XZ para cubrirlo hasta su borde de conexion.

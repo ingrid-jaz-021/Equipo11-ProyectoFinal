@@ -74,7 +74,7 @@ public:
             const float delta = std::remainder(targetYaw - yaw, 6.28318530718f);
             yaw += delta * (1.0f - std::exp(-12.0f * dt));
             // Proporcion respecto a la altura: FBX puede usar centimetros.
-            const float cycleDistance = height * glm::mix(0.46f, 0.86f, running);
+            const float cycleDistance = height * glm::mix(MovementSettings::WalkStrideHeightRatio,MovementSettings::RunStrideHeightRatio,running);
             phase = std::fmod(phase + glm::length(displacement) * 6.28318530718f / cycleDistance, 6.28318530718f);
         }
         const float weight = glm::clamp(actualSpeed / (worldScale * MovementSettings::WalkSpeed), 0.0f, 1.0f);
@@ -82,13 +82,13 @@ public:
         if (animator) animator->Update(dt, phase, gait, running);
     }
     glm::vec3 Forward() const { return glm::vec3(std::sin(yaw), 0.0f, std::cos(yaw)); }
-    void ConformToGround(const GroundSurface& ground,const glm::vec3& origin,float scale,float dt)
+    void ConformToGround(const GroundSurface& ground,const glm::vec3& origin,float scale,float dt,float minStepHeight=0)
     {
         if(frozen) return;
         const glm::vec3 source=position/scale+origin;
         float floor=0;
         const float radius=height/scale*0.12f;
-        const float stepHeight=height/scale*.80f;
+        const float stepHeight=std::max(height/scale*.80f,minStepHeight);
         const bool supported=ground.SampleCharacter(source.x,source.z,source.y,floor,radius,stepHeight);
         const float target=(floor-origin.y)*scale;
         if(supported&&target>=position.y-0.001f)

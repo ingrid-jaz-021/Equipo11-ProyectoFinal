@@ -28,7 +28,7 @@ struct ModelOptions
 {
     GroundSurface* ground = nullptr;
     bool skeletal = false;
-    const char* boundaryProfileMaterial = nullptr;
+    std::vector<std::string> boundaryProfileMaterials;
 };
 
 class Model
@@ -69,11 +69,20 @@ public:
     bool GetMaterialEndBounds(const std::string& name,int axis,float band,glm::vec3& min,glm::vec3& max) const
     {
         glm::vec3 lo,hi;
-        if(axis<0||axis>2||!options.boundaryProfileMaterial||name!=options.boundaryProfileMaterial||
-            !GetMaterialBounds(name,lo,hi)||boundaryProfile.empty()) return false;
+        const auto profile=materialProfiles.find(name);
+        if(axis<0||axis>2||profile==materialProfiles.end()||!GetMaterialBounds(name,lo,hi)) return false;
         min=glm::vec3((std::numeric_limits<float>::max)());
         max=glm::vec3((std::numeric_limits<float>::lowest)());bool found=false;
-        for(const auto& p:boundaryProfile) if(p[axis]>=hi[axis]-band)
+        for(const auto& p:profile->second) if(p[axis]>=hi[axis]-band)
+        {min=glm::min(min,p);max=glm::max(max,p);found=true;}
+        return found;
+    }
+    bool GetMaterialSectionBounds(const std::string& name,int axis,float from,float to,glm::vec3& min,glm::vec3& max) const
+    {
+        const auto profile=materialProfiles.find(name);
+        if(profile==materialProfiles.end()||axis<0||axis>2||from>to)return false;
+        min=glm::vec3((std::numeric_limits<float>::max)());max=glm::vec3((std::numeric_limits<float>::lowest)());bool found=false;
+        for(const auto& p:profile->second)if(p[axis]>=from&&p[axis]<=to)
         {min=glm::min(min,p);max=glm::max(max,p);found=true;}
         return found;
     }
@@ -92,7 +101,7 @@ private:
     std::unordered_map<std::string, GLuint> texturesLoaded;
     std::string directory;
     ModelOptions options;
-    std::vector<glm::vec3> boundaryProfile;
+    std::unordered_map<std::string,std::vector<glm::vec3>> materialProfiles;
     std::unique_ptr<SkeletalAnimator> skeleton;
     struct Bounds { glm::vec3 min, max; };
     std::unordered_map<std::string, Bounds> materialBounds;
@@ -190,10 +199,9 @@ private:
             if (face.mNumIndices == 3) indices.insert(indices.end(), face.mIndices, face.mIndices + 3);
         }
         if (indices.empty()) return;
-        // Solo se retienen los pocos vertices del tapete solicitado, nunca el
-        // escenario masivo. Permite medir su extremo de conexion con la plaza.
-        if(options.boundaryProfileMaterial&&materialName==options.boundaryProfileMaterial)
-            for(const auto& vertex:vertices) boundaryProfile.push_back(vertex.Position);
+        // Solo perfiles pequenos: tapete terminal y tablones del muelle.
+        if(std::find(options.boundaryProfileMaterials.begin(),options.boundaryProfileMaterials.end(),materialName)!=options.boundaryProfileMaterials.end())
+            for(const auto& vertex:vertices)materialProfiles[materialName].push_back(vertex.Position);
         const auto existingBounds = materialBounds.find(materialName);
         if (existingBounds == materialBounds.end()) materialBounds.emplace(materialName, Bounds{ meshMin, meshMax });
         else

@@ -21,7 +21,14 @@ public:
         glm::vec3 deckLo,deckHi;
         if(!environment.GetMaterialBounds("Material.027",deckLo,deckHi))
             throw std::runtime_error("No se encontro la tarima de la Laguna para ajustar el agua.");
-        const float level=deckLo.y-.40f;
+        glm::vec3 dockLo,dockHi;
+        // La parte positiva en X de esta malla es el muelle Pasillo-Laguna;
+        // la tarima de la ofrenda, al oeste, pertenece a otra zona.
+        if(!environment.GetMaterialSectionBounds("tarima_madera.001",0,0,(std::numeric_limits<float>::max)(),dockLo,dockHi))
+            throw std::runtime_error("No se pudo medir el muelle que conecta el Pasillo con la Laguna.");
+        minX=std::min(minX,dockLo.x);maxX=std::max(maxX,dockHi.x);
+        minZ=std::min(minZ,dockLo.z);maxZ=std::max(maxZ,dockHi.z);
+        const float level=std::min(deckLo.y-.40f,dockLo.y-.25f);
         if(deckLo.x<minX||deckHi.x>maxX||deckLo.z<minZ||deckHi.z>maxZ)
             throw std::runtime_error("El plano de agua no cubre la Laguna.");
         int width,height;
@@ -30,23 +37,37 @@ public:
         const float tileHeight=tileWidth*static_cast<float>(height)/width;
         const float u=(maxX-minX)/tileWidth,v=(maxZ-minZ)/tileHeight;
         const std::vector<Vertex> vertices={
-            {{minX,level,minZ},{0,1,0},{0,0}},{{maxX,level,minZ},{0,1,0},{u,0}},
-            {{maxX,level,maxZ},{0,1,0},{u,v}},{{minX,level,maxZ},{0,1,0},{0,v}}
+            {{-.5f,0,-.5f},{0,1,0},{minX/tileWidth,minZ/tileHeight}},{{.5f,0,-.5f},{0,1,0},{maxX/tileWidth,minZ/tileHeight}},
+            {{.5f,0,.5f},{0,1,0},{maxX/tileWidth,maxZ/tileHeight}},{{-.5f,0,.5f},{0,1,0},{minX/tileWidth,maxZ/tileHeight}}
         };
         MeshMaterial material;material.diffuseTexture=texture;
         quad=std::make_unique<Mesh>(vertices,std::vector<GLuint>{0,2,1,0,3,2},material,
-            glm::vec3(minX,level,minZ),glm::vec3(maxX,level,maxZ));
-        model=glm::scale(glm::translate(glm::mat4(1),-origin*scale),glm::vec3(scale));
+            glm::vec3(-.5f,0,-.5f),glm::vec3(.5f,0,.5f));
         center=(glm::vec3((minX+maxX)*.5f,level,(minZ+maxZ)*.5f)-origin)*scale;
+        // Plano unitario: ampliar SOLO XZ y trasladar su centro, con una unica
+        // conversion entre coordenadas fuente y mundo.
+        model=glm::translate(glm::mat4(1),center);
+        model=glm::scale(model,glm::vec3((maxX-minX)*scale,1,(maxZ-minZ)*scale));
+        dockCenter=(glm::vec3((dockLo.x+dockHi.x)*.5f,level,(dockLo.z+dockHi.z)*.5f)-origin)*scale;
+        // Comprobar los limites transformados, no solo los numeros del archivo.
+        const auto inverseModel=glm::inverse(model);
+        for(float x:{dockLo.x,dockHi.x})for(float z:{dockLo.z,dockHi.z})
+        {
+            const auto local=glm::vec3(inverseModel*glm::vec4((glm::vec3(x,level,z)-origin)*scale,1));
+            if(std::abs(local.x)>.50001f||std::abs(local.z)>.50001f)
+                throw std::runtime_error("El agua deja parte del muelle fuera de su superficie.");
+        }
         tileWorld=glm::vec2(tileWidth,tileHeight)*scale;
         shader.Use();glUniform1i(glGetUniformLocation(shader.Program,"texture_diffuse1"),0);
         std::cout<<"Agua Laguna: plano "<<maxX-minX<<" x "<<maxZ-minZ<<", Y="<<level
             <<", UV "<<u<<" x "<<v<<"; debajo de la tarima y con UV scrolling."<<std::endl;
+        std::cout<<"Cuenca cubierta hasta el muelle: X "<<minX<<".."<<maxX<<", Z "<<minZ<<".."<<maxZ<<"."<<std::endl;
     }
     ~WaterSurface(){if(texture)glDeleteTextures(1,&texture);}
     WaterSurface(const WaterSurface&)=delete;
     WaterSurface& operator=(const WaterSurface&)=delete;
     const glm::vec3& Center() const{return center;}
+    const glm::vec3& DockCenter() const{return dockCenter;}
     void Draw(const glm::mat4& view,const glm::mat4& projection,const glm::vec3& eye,double seconds) const
     {
         shader.Use();
@@ -84,5 +105,5 @@ public:
     }
 private:
     Shader shader;GLuint texture=0;std::unique_ptr<Mesh> quad;
-    glm::mat4 model=glm::mat4(1);glm::vec3 center=glm::vec3(0);glm::vec2 tileWorld=glm::vec2(1);
+    glm::mat4 model=glm::mat4(1);glm::vec3 center=glm::vec3(0),dockCenter=glm::vec3(0);glm::vec2 tileWorld=glm::vec2(1);
 };

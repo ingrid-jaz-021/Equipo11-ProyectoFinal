@@ -27,6 +27,7 @@
     <ClInclude Include="CharacterController.h">
       <Filter>Archivos de encabezado</Filter>
     </ClInclude>
+    <ClInclude Include="CompanionController.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="GroundSurface.h">
       <Filter>Archivos de encabezado</Filter>
     </ClInclude>

@@ -8,6 +8,9 @@ fuera de OneDrive. `Proyecto/Proyecto.cpp` contiene el render loop.
 ## Controles y camaras
 
 - **C:** alternar tercera persona y camara libre.
+- **F:** el xolo pausa el seguimiento, olfatea, gira y da un paso de carrera;
+  al terminar vuelve automaticamente al lado de la niña. Funciona tambien desde
+  la camara libre y no mueve ni anima a la niña congelada.
 - **Tercera persona:** WASD mueve a la niña; Shift corre; raton orbita; rueda acerca/aleja.
 - **Camara libre:** WASD vuela en la direccion de la mirada; E/Q sube/baja;
   Shift acelera y la rueda cambia el campo de vision.
@@ -28,8 +31,12 @@ El modelo activo es **`Models/NinaRig/NinaRig.fbx`**. Blender genero:
 - Clips **Idle**, **Walk** y **Run** con keyframes de posicion, quaternion y escala.
 - Codos y rodillas con pesos propios y dos cortes adicionales de soporte en las
   extremidades para repartir la flexion sin doblar brazos desde los hombros.
-- Codos de marcha entre 24 y 53 grados; de carrera entre 53 y 96 grados.
-  Rodillas de marcha hasta 74 grados y de carrera hasta 108 grados.
+- Los clips activos proceden de captura humana CMU: Walk 07_01, Run 09_01 e
+  Idle 77_02. Sustituyen los ciclos de extremidades sintetizados con senos.
+- Retarget por direcciones articulares y marcos anatomicos, correccion de contacto
+  de suelas y alineacion de la fase del pie izquierdo entre marcha y carrera.
+- Codos de marcha aproximadamente 6 a 48 grados y rodillas hasta 70; en carrera
+  los codos conservan flexion variable hasta 94 grados y las rodillas hasta 116.
 - Contacto de las suelas horneado en cada keyframe para mantener los pies sobre
   el suelo durante la flexion y el balanceo del cuerpo.
 - Versiones `.blend`, `.fbx` y `.glb`, con ocho texturas copiadas a nombres ASCII.
@@ -41,6 +48,15 @@ skinning a cuatro influencias y admite hasta 48 huesos. La conversion FBX de
 unidades no cambia la cadencia, que se calcula respecto a la altura del personaje.
 La geometria original y el archivo Blender original se conservan.
 
+`arm-limits.txt` es el perfil compartido por Blender y C++: balanceo del humero
+entre -30 y 45 grados, abduccion -4 a 28 y codo entre 6 y 100 grados. El retarget
+comprime suavemente los gestos mas cerrados del adulto para conservar su variacion
+sin pegar todo el ciclo al limite. Se mantienen munecas y palmas por debajo del
+hombro con margen para el volumen real de las manos. La proteccion de
+`SkeletalAnimator.h` se aplica DESPUES de toda mezcla y antes de propagar hijos,
+por lo que tambien limita poses intermedias y overlays. `arm-safety-audit.json`
+registra la altura maxima de vertices de antebrazos/manos en todos los keyframes.
+
 Para regenerar el rig con Blender instalado desde Microsoft Store, ejecutar desde
 la carpeta de la solucion:
 
@@ -48,9 +64,49 @@ la carpeta de la solucion:
 & "$env:LOCALAPPDATA\Microsoft\WindowsApps\blender-launcher.exe" --background --python ".\Proyecto\tools\build_nina_rig.py"
 ```
 
-El script crea el rig, aplica la pose de enlace relajada, asigna los grupos de
-vertices, hornea los tres clips y exporta. Los pivotes estan ajustados a la niña
-suministrada; un modelo de anatomia diferente requiere retocar este script.
+El script crea el rig y pesos, y llama a `tools/mocap_retarget.py` para retargetear
+los BVH incluidos en `Models/NinaRig/mocap`. Se hornean a 60 FPS, sin desplazamiento
+horizontal de raiz, y se corrigen las uniones de los ciclos. El controlador ajusta
+la cadencia a la distancia recorrida y mezcla los clips con quaternions.
+`mocap-retarget.json` guarda los recortes y fases de las capturas. La atribucion y
+los terminos originales se conservan en `mocap/ATTRIBUTION.md` y `READMEFIRST.txt`.
+Fuente: https://mocap.cs.cmu.edu/ ; conversion BVH:
+https://github.com/una-dinosauria/cmu-mocap .
+
+## Xoloitzcuintle acompanante
+
+El modelo activo es `Models/XoloRig/XoloRig.fbx`, con 24 huesos deformantes y
+cuatro clips: Idle, Walk, Run y Special. Tiene codos, rodillas, corvejones, patas,
+cuello, cabeza, orejas y tres segmentos de cola con pesos normalizados (maximo
+cuatro influencias). Se conserva el OBJ original y se corrigieron sus rutas MTL
+absolutas a rutas relativas; el FBX utiliza dos texturas ASCII dentro de XoloRig.
+
+`CompanionController.h` mantiene un objetivo 1.8 unidades fuente al costado y
+0.8 detras de la niña. Usa anticipacion de velocidad, aceleracion amortiguada,
+giro por el angulo mas corto, subpasos de 120 Hz y la misma deteccion de suelo.
+El perro mide 1.4 unidades fuente y acelera hasta 9 para alcanzar a la niña.
+La distancia inicial de tercera persona es 8 unidades fuente para mostrar a ambos.
+Cada modelo carga su propia jerarquia y paleta de matrices; DrawObject recibe
+explicitamente el actor correspondiente antes de subir sus huesos al shader.
+
+F inicia una sola reproduccion del clip Special (3.8 segundos):
+
+- 0 a 1.6 s: flexion de patas delanteras, cuello y cabeza para olfatear.
+- 1.42 a 1.65 s: la cabeza anticipa la direccion; despues comienza el pecho.
+- 1.65 a 2.70 s: giro de 360 grados con desfases entre cabeza, cuello, pecho,
+  columna y cadera. Las patas alternan apoyos plantados y pasos cortos elevados;
+  cada pata tiene su propia fase, orientacion y solucion IK. El cuerpo se agacha
+  e inclina ligeramente y la cola acompaña el movimiento.
+- 2.70 a 3.8 s: un paso de carrera, con traslacion interpolada de 1.6 unidades.
+
+Durante la accion el objetivo de seguimiento queda pausado. Se mezclan las poses
+al entrar/salir; Special se limita a su ultimo keyframe y no entra en bucle.
+Despues se recupera el objetivo lateral sin teletransportar al perro.
+La nariz queda aproximadamente a 5.7 cm fuente del piso en la fase de olfateo.
+
+Para regenerarlo, ejecutar `tools/build_xolo_rig.py` con blender-launcher.exe y
+los mismos argumentos de background usados para la niña. Se producen FBX, GLB,
+BLEND y `rig-manifest.json`; los originales del usuario permanecen disponibles.
 
 ## Tamano, velocidad y altura del terreno
 
@@ -157,15 +213,24 @@ El skybox conserva filtrado continuo y correccion de diferencias entre caras.
 
 ## Agua animada de la Laguna
 
-`WaterSurface.h` crea un plano horizontal debajo de la tarima Material.027:
-su nivel es el minimo Y de esa malla menos 0.4 unidades fuente. `WaterPlane.txt`
+`WaterSurface.h` crea un plano unitario horizontal debajo de la tarima Material.027
+y del muelle de conexion. Su nivel queda 0.4 unidades bajo la tarima y al menos
+0.25 bajo los tablones. `WaterPlane.txt`
 contiene los limites XZ medidos del material None.001 de `Laguna/Agua/Lago(Lag).obj`.
 Se carga solo el plano; ese OBJ auxiliar contiene ademas toda la escena duplicada.
+El cargador conserva tambien el pequeno perfil `tarima_madera.001` del muelle.
+Se seleccionan sus dos tramos del lado Laguna (X positivo) y se unen sus limites
+con los de la cuenca. La superficie alcanza ahora X=4.976494, frente al antiguo
+69.67717; cubre el muelle completo de X=4.976494 a 73.178017. El plano mide
+434.33875 x 369.6384 unidades fuente y su centro se desplaza hacia el Pasillo.
+La matriz usa translate al nuevo centro y scale independiente en X/Z. Se verifican
+las cuatro esquinas del muelle contra la matriz inversa del plano.
 
 Se usa `Laguna/Agua/River_Water_Texture-427.jpg` con mipmaps, anisotropia y
 GL_MIRRORED_REPEAT para que la foto no produzca un salto de color entre repeticiones.
 Cada repeticion mide 36 unidades fuente de ancho y conserva la proporcion de los
-7360 x 4912 pixeles. `Shader/water.frag` recibe el tiempo de glfwGetTime() cada frame
+7360 x 4912 pixeles. Las UV se anclan a posiciones fuente para ampliar sin estirar
+ni mover la textura. `Shader/water.frag` recibe el tiempo de glfwGetTime() cada frame
 y mezcla dos capas con desplazamiento UV continuo y ondulacion suave. Una mezcla
 de cuatro parches con offsets estables elimina la cuadricula visible de la foto;
 textureGrad mantiene el LOD estable durante el desplazamiento. El agua
@@ -182,7 +247,7 @@ antes del skybox y de los planos transparentes.
 `--validate` prueba movimiento a distintos FPS, diagonales, escala UV y bloqueo
 de controles. Con el FBX real cargado, simula C y WASD y comprueba que las matrices
 de huesos y la posicion permanezcan exactamente iguales mientras la camara se mueve.
-Dibuja 330 frames con modelos, agua, arboles, fachadas, luces y ambas camaras; verifica profundidad
+Dibuja 620 frames con niña, xolo, agua, arboles, fachadas, luces y ambas camaras; verifica profundidad
 y errores de OpenGL. Mide la flexion de codos y rodillas en los clips importados,
 prueba entrada/salida de pasto a 30/60/144 FPS y comprueba las tapas elevadas del
 escenario real. Comprueba exactamente una iglesia, repeticion de las tres casas,
@@ -193,7 +258,12 @@ Guarda vistas del paso, del personaje sobre la entrada y de la laguna. Una prueb
 en GPU comprueba que el agua produce imagenes distintas en dos tiempos.
 Una prueba de framebuffer
 verifica en GPU el descarte alfa <0.1 y la mezcla de un pixel al 50% sobre el cielo.
-`--validate-character` omite el entorno masivo y dibuja 140 frames.
+Tambien verifica el esqueleto del xolo, bajada de cabeza, rotacion de raiz,
+anticipacion de cabeza, desfase de torso y flexion de patas durante el giro.
+Comprueba 4500 poses/mezclas de brazos, la cobertura completa del muelle,
+la reproduccion sin bucle y el seguimiento/accion/regreso a 30/60/144 FPS. Simula la
+tecla F y captura las tres fases. `--validate-character` omite el entorno masivo
+y dibuja 420 frames con ambos personajes.
 Un segundo argumento opcional define el prefijo de capturas TGA.
 
 La carga del OBJ de 325 MB puede tardar varios minutos. La navegacion ajusta

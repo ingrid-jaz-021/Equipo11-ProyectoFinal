@@ -15,6 +15,7 @@ def smooth(t):
 def mix(a,b,t): return a+(b-a)*t
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    bpy.context.preferences.filepaths.save_version=0
     bpy.ops.wm.obj_import(filepath=str(ROOT/"Models"/"niña zocalo.obj"),
         forward_axis='NEGATIVE_Z', up_axis='Y')
     meshes=[o for o in bpy.context.scene.objects if o.type=='MESH']
@@ -136,70 +137,11 @@ def main():
     for o in meshes:
         for v,co in zip(o.data.vertices,baked[o.name]): v.co=co
         o.data.update()
-    rig.animation_data_create()
-    sole_meshes=[o for o in meshes if o.name.startswith("Shoe")]
-    sole_level=min(v.co.z for o in sole_meshes for v in o.data.vertices)
-    scene=bpy.context.scene;scene.render.fps=30
-    clips=[]
-    for name,count,run in [("Idle",60,0),("Walk",40,0),("Run",30,1)]:
-        action=bpy.data.actions.new(name);action.use_fake_user=True
-        rig.animation_data.action=action
-        for frame in range(count+1):
-            scene.frame_set(frame)
-            phase=2*math.pi*frame/count
-            for pb in rig.pose.bones:
-                pb.location=(0,0,0);pb.rotation_quaternion=(1,0,0,0);pb.scale=(1,1,1)
-            if name=="Idle":
-                rotate_world("Chest",(1,0,0),math.radians(0.7)*math.sin(phase))
-                rotate_world("Head",(0,1,0),math.radians(0.6)*math.sin(phase))
-                for side in ["L","R"]:
-                    rotate_world("Forearm."+side,(1,0,0),-math.radians(18))
-                    rotate_world("Thigh."+side,(1,0,0),-0.08)
-                    rotate_world("Shin."+side,(1,0,0),0.18)
-                    rotate_world("Foot."+side,(1,0,0),-0.10)
-            else:
-                duty=mix(0.60,0.40,run);reach=mix(0.18,0.225,run)
-                root_y=-mix(0.007,0.015,run)-mix(0.050,0.075,run)*(0.5+0.5*math.cos(2*phase))
-                rig.pose.bones["Hips"].location.y=root_y
-                rotate_world("Hips",(0,0,1),math.radians(mix(1.6,2.4,run))*math.sin(phase))
-                rotate_world("Chest",(0,1,0),math.radians(mix(3,5,run))*math.sin(phase))
-                for s,sign in [("L",1),("R",-1)]:
-                    cycle=(frame/count+(0 if sign==1 else 0.5))%1
-                    lift=0
-                    if cycle<duty:
-                        t=cycle/duty;fz=mix(reach,-reach,t)
-                    else:
-                        t=(cycle-duty)/(1-duty)
-                        tangent=-2*reach*(1-duty)/duty
-                        fz=-reach+tangent*t+(2*reach-tangent)*smooth(t)
-                        lift=64*(t*(1-t))**3*mix(0.060,0.120,run)
-                    dz=fz+0.01;dy=0.105+lift-root_y-0.43
-                    a,b=0.175,0.150
-                    dist=max(0.12,min(a+b-0.001,math.hypot(dz,dy)))
-                    knee=math.acos(max(-1,min(1,(dist*dist-a*a-b*b)/(2*a*b))))
-                    knee=min(knee,mix(1.45,1.95,run))
-                    hip=math.atan2(-dz,-dy)-math.atan2(b*math.sin(knee),a+b*math.cos(knee))
-                    hip=max(-0.85,min(0.70,hip))
-                    rotate_world("Thigh."+s,(1,0,0),hip)
-                    rotate_world("Shin."+s,(1,0,0),knee)
-                    rotate_world("Foot."+s,(1,0,0),max(-0.55,min(0.55,-hip-knee)))
-                    rotate_world("UpperArm."+s,(1,0,0),sign*math.sin(phase)*mix(0.28,0.42,run))
-                    elbow_wave=0.5+0.5*sign*math.cos(phase-0.2)
-                    elbow_degrees=mix(mix(25,55,elbow_wave),mix(55,100,elbow_wave),run)
-                    rotate_world("Forearm."+s,(1,0,0),-math.radians(elbow_degrees))
-                    rotate_world("Hand."+s,(1,0,0),0.08*sign*math.sin(phase-0.2))
-            # Hornea el contacto real de las suelas; evita atravesar el piso
-            # incluso al doblar rodillas o inclinar el pie durante el apoyo.
-            bpy.context.view_layer.update()
-            deps=bpy.context.evaluated_depsgraph_get()
-            minimum=min(v.co.z for o in sole_meshes for v in o.evaluated_get(deps).data.vertices)
-            rig.pose.bones["Hips"].location.y+=sole_level-minimum
-            bpy.context.view_layer.update()
-            for pb in rig.pose.bones:
-                pb.keyframe_insert(data_path="location",frame=frame,group=pb.name)
-                pb.keyframe_insert(data_path="rotation_quaternion",frame=frame,group=pb.name)
-                pb.keyframe_insert(data_path="scale",frame=frame,group=pb.name)
-        clips.append({"name":name,"frames":count,"seconds":count/30})
+    import sys
+    sys.path.insert(0,str(ROOT/"tools"))
+    from mocap_retarget import bake_mocap
+    clips=bake_mocap(rig,meshes,OUT)
+    scene=bpy.context.scene
     rig.animation_data.action=bpy.data.actions["Idle"]
     scene.frame_start=0;scene.frame_end=60;scene.frame_set(0)
     bpy.ops.object.select_all(action='DESELECT')
@@ -231,7 +173,9 @@ def main():
                 ranges[name][joint+side]={"min":min(angles),"max":max(angles)}
     (OUT/"rig-manifest.json").write_text(json.dumps({"bones":list(arm.bones.keys()),
         "clips":clips,"meshes":len(meshes),"rest_pose":"relaxed arms, baked in bind pose",
-        "joint_ranges_degrees":ranges,"deformation_support_loops":2,"foot_contact_baked":True},indent=2),encoding="utf8")
+        "joint_ranges_degrees":ranges,"deformation_support_loops":2,"foot_contact_baked":True,"motion_source":"CMU captured motion; see mocap-retarget.json"},indent=2),encoding="utf8")
+    (OUT/"rig-status.txt").write_text("OK CMU mocap",encoding="utf8")
+    if (OUT/"rig-error.txt").exists():(OUT/"rig-error.txt").unlink()
 try: main()
 except Exception:
     (OUT/"rig-error.txt").write_text(traceback.format_exc(),encoding="utf8")
