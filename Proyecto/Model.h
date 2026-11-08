@@ -41,26 +41,47 @@ public:
         try { LoadModel(path, keepLoading); }
         catch (...) { ReleaseTextures(); throw; }
     }
-    ~Model() { ReleaseTextures(); }
+    ~Model() { if(instanceBuffer)glDeleteBuffers(1,&instanceBuffer);ReleaseTextures(); }
     Model(const Model&) = delete;
     Model& operator=(const Model&) = delete;
 
     void Draw(const Shader& shader,const glm::mat4& clipFromModel,bool cull,const glm::mat4& baseModel) const
     {
-        // Planos del frustum en coordenadas del OBJ: omitir mallas enteras fuera de vista.
+        const auto basePlanes=ExtractFrustum(clipFromModel);
+        if(cull&&!BoundsVisible(basePlanes,minBounds,maxBounds)){++RenderMetrics::culled;return;}
+        const auto baseNormal=glm::transpose(glm::inverse(glm::mat3(baseModel)));
+        glm::mat4 previousLocal(0);bool matricesSet=false;
         for (const Mesh& mesh : meshes)
         {
-            const auto rows=glm::transpose(clipFromModel*mesh.LocalTransform());
-            const std::array<glm::vec4,6> planes={rows[3]+rows[0],rows[3]-rows[0],rows[3]+rows[1],rows[3]-rows[1],rows[3]+rows[2],rows[3]-rows[2]};
-            if(cull&&!mesh.IsVisible(planes))continue;
-            const auto model=baseModel*mesh.LocalTransform();const auto normal=glm::transpose(glm::inverse(glm::mat3(model)));
-            glUniformMatrix4fv(glGetUniformLocation(shader.Program,"model"),1,GL_FALSE,&model[0][0]);
-            glUniformMatrix3fv(glGetUniformLocation(shader.Program,"normalMatrix"),1,GL_FALSE,&normal[0][0]);
-            mesh.Draw(shader);
+            const auto planes=mesh.HasIdentityTransform()?basePlanes:ExtractFrustum(clipFromModel*mesh.LocalTransform());
+            if(cull&&!mesh.IsVisible(planes)){++RenderMetrics::culled;continue;}
+            if(!matricesSet||previousLocal!=mesh.LocalTransform())
+            {
+                const auto model=baseModel*mesh.LocalTransform();const auto normal=baseNormal*mesh.LocalNormal();
+                glUniformMatrix4fv(shader.Uniform("model"),1,GL_FALSE,&model[0][0]);
+                glUniformMatrix3fv(shader.Uniform("normalMatrix"),1,GL_FALSE,&normal[0][0]);
+                previousLocal=mesh.LocalTransform();matricesSet=true;
+            }
+            mesh.Draw(shader,cull?&planes:nullptr);
         }
-        glBindVertexArray(0);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    void DrawInstances(const Shader& shader,const std::vector<glm::mat4>& transforms,const glm::mat4& viewProjection) const
+    {
+        if(options.skeletal)throw std::runtime_error("El lote estatico no acepta modelos con huesos.");
+        const auto planes=ExtractFrustum(viewProjection);visibleInstances.clear();
+        for(const auto& transform:transforms)
+            if(TransformedBoundsVisible(planes,minBounds,maxBounds,transform))visibleInstances.push_back(transform);
+            else ++RenderMetrics::culled;
+        if(visibleInstances.empty())return;
+        shader.Use();glUniformMatrix4fv(shader.Uniform("viewProjection"),1,GL_FALSE,&viewProjection[0][0]);
+        if(!instanceBuffer)glGenBuffers(1,&instanceBuffer);
+        glBindBuffer(GL_ARRAY_BUFFER,instanceBuffer);
+        glBufferData(GL_ARRAY_BUFFER,visibleInstances.size()*sizeof(glm::mat4),visibleInstances.data(),GL_STREAM_DRAW);
+        for(const auto& mesh:meshes)
+        {
+            if(!mesh.HasIdentityTransform())throw std::runtime_error("El lote de farolas requiere mallas en el espacio comun del modelo.");
+            mesh.DrawInstanced(shader,instanceBuffer,static_cast<GLsizei>(visibleInstances.size()));
+        }
     }
     const glm::vec3& GetMinBounds() const { return minBounds; }
     const glm::vec3& GetMaxBounds() const { return maxBounds; }
@@ -72,7 +93,13 @@ public:
         if(!GetMaterialBounds("Material.014",lo,hi)||benchCount!=8||benchMaxHeight>2.1f||
             std::abs((hi.y-lo.y)/kioskRawHeight-MovementSettings::KioskScale)>.001f)
             throw std::runtime_error("Las proporciones del kiosko o de las ocho bancas no son correctas.");
+        glm::vec3 fountainLo,fountainHi;
+        if(!GetMaterialBounds("Material.004",fountainLo,fountainHi)||
+            std::abs((fountainHi.x-fountainLo.x)/fountainRawWidth-MovementSettings::FountainScale)>.001f||
+            std::max(fountainHi.x-fountainLo.x,fountainHi.z-fountainLo.z)>(hi.x-lo.x)*.4f)
+            throw std::runtime_error("La fuente no tiene escala independiente o invade los pilares.");
         std::cout<<"Proporciones OK: kiosko x"<<MovementSettings::KioskScale<<", "<<benchCount<<" bancas x"<<MovementSettings::BenchScale<<", respaldo maximo "<<benchMaxHeight<<"."<<std::endl;
+        std::cout<<"Fuente independiente x"<<MovementSettings::FountainScale<<", ancho "<<fountainHi.x-fountainLo.x<<"; kiosko sin cambios."<<std::endl;
     }
     bool GetMaterialBounds(const std::string& name, glm::vec3& min, glm::vec3& max) const
     {
@@ -113,6 +140,8 @@ private:
     };
 
     std::vector<Mesh> meshes;
+    mutable GLuint instanceBuffer=0;
+    mutable std::vector<glm::mat4> visibleInstances;
     std::unordered_map<std::string, GLuint> texturesLoaded;
     std::string directory;
     ModelOptions options;
@@ -121,7 +150,8 @@ private:
     struct Bounds { glm::vec3 min, max; };
     std::unordered_map<std::string, Bounds> materialBounds;
     glm::mat4 kioskTransform=glm::mat4(1);
-    float floorLevel=2.005836f,kioskRawHeight=1,benchMaxHeight=0;
+    glm::mat4 fountainTransform=glm::mat4(1);
+    float floorLevel=2.005836f,kioskRawHeight=1,fountainRawWidth=1,benchMaxHeight=0;
     size_t benchCount=0;
     glm::vec3 minBounds = glm::vec3((std::numeric_limits<float>::max)());
     glm::vec3 maxBounds = glm::vec3((std::numeric_limits<float>::lowest)());
@@ -181,24 +211,32 @@ private:
     void ConfigureLayout(const aiScene* scene)
     {
         glm::vec3 lo((std::numeric_limits<float>::max)()),hi((std::numeric_limits<float>::lowest)());bool found=false;
+        glm::vec3 fountainLo=lo,fountainHi=hi;bool foundFountain=false;
         for(unsigned m=0;m<scene->mNumMeshes;++m)
         {
             const auto* mesh=scene->mMeshes[m];aiString name;scene->mMaterials[mesh->mMaterialIndex]->Get(AI_MATKEY_NAME,name);
             const std::string material=name.C_Str();
-            if(material!="Material.014"&&material!="Material.006")continue;
+            if(material!="Material.014"&&material!="Material.006"&&material!="Material.004")continue;
             for(unsigned v=0;v<mesh->mNumVertices;++v)
             {
                 const auto& p=mesh->mVertices[v];
                 if(material=="Material.006")floorLevel=std::max(floorLevel,p.y);
+                else if(material=="Material.004")
+                {fountainLo=glm::min(fountainLo,glm::vec3(p.x,p.y,p.z));fountainHi=glm::max(fountainHi,glm::vec3(p.x,p.y,p.z));foundFountain=true;}
                 else{lo=glm::min(lo,glm::vec3(p.x,p.y,p.z));hi=glm::max(hi,glm::vec3(p.x,p.y,p.z));found=true;}
             }
         }
-        if(!found)throw std::runtime_error("No se pudo separar el kiosko del entorno.");
+        if(!found||!foundFountain)throw std::runtime_error("No se pudo separar el kiosko y su fuente del entorno.");
         const glm::vec3 anchor((lo.x+hi.x)*.5f,floorLevel,(lo.z+hi.z)*.5f);
         kioskTransform=glm::translate(glm::mat4(1),anchor);
         kioskTransform=glm::scale(kioskTransform,glm::vec3(MovementSettings::KioskScale));
         kioskTransform=glm::translate(kioskTransform,-anchor);
         kioskRawHeight=hi.y-lo.y;
+        const glm::vec3 fountainAnchor((fountainLo.x+fountainHi.x)*.5f,floorLevel,(fountainLo.z+fountainHi.z)*.5f);
+        fountainTransform=glm::translate(glm::mat4(1),fountainAnchor);
+        fountainTransform=glm::scale(fountainTransform,glm::vec3(MovementSettings::FountainScale));
+        fountainTransform=glm::translate(fountainTransform,-fountainAnchor);
+        fountainRawWidth=fountainHi.x-fountainLo.x;
     }
     void AddPart(const std::vector<Vertex>& vertices,const std::vector<GLuint>& indices,const std::vector<SkinVertex>& skin,
         const MeshMaterial& material,const std::string& name,const glm::mat4& transform)
@@ -218,7 +256,7 @@ private:
                 options.ground->Add(glm::vec3(transform*glm::vec4(vertices[indices[i]].Position,1)),
                     glm::vec3(transform*glm::vec4(vertices[indices[i+1]].Position,1)),
                     glm::vec3(transform*glm::vec4(vertices[indices[i+2]].Position,1)),GroundSurface::IsRaisedGrass(name));
-        meshes.emplace_back(vertices,indices,material,lo,hi,skin,transform);
+        meshes.emplace_back(vertices,indices,material,lo,hi,skin,transform,options.ground!=nullptr);
     }
     void AddBenches(const std::vector<Vertex>& vertices,const std::vector<GLuint>& indices,const MeshMaterial& material,const std::string& name)
     {
@@ -336,8 +374,9 @@ private:
         if(options.ground&&materialName=="LoD_0SG")AddBenches(vertices,indices,material,materialName);
         else
         {
-            const bool kiosk=options.ground&&(materialName=="Material.014"||materialName=="Material.004"||materialName=="Material.005"||materialName=="Material.007");
-            AddPart(vertices,indices,skin,material,materialName,kiosk?kioskTransform:glm::mat4(1));
+            const bool kiosk=options.ground&&materialName=="Material.014";
+            const bool fountain=options.ground&&(materialName=="Material.004"||materialName=="Material.005"||materialName=="Material.007");
+            AddPart(vertices,indices,skin,material,materialName,kiosk?kioskTransform:fountain?fountainTransform:glm::mat4(1));
         }
     }
     GLuint LoadTexture(std::string relativePath)

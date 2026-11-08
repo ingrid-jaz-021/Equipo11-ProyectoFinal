@@ -8,15 +8,22 @@ fuera de OneDrive. `Proyecto/Proyecto.cpp` contiene el render loop.
 ## Controles y camaras
 
 - **C:** alternar tercera persona y camara libre.
+- **V:** alternar V-Sync. Inicia desactivado (`glfwSwapInterval(0)`).
+- **E en tercera persona:** embarcar cerca del casco; desembarcar solo junto a
+  suelo firme del muelle, plataformas u orillas. En camara libre E sigue subiendo.
+- **Navegando:** W/S avanza/retrocede; A/D gira el timon; Shift acelera.
+  La niña y el xolo viajan inmoviles dentro del casco y la camara sigue el bote.
 - **F:** el xolo pausa el seguimiento, olfatea, gira y da un paso de carrera;
   al terminar vuelve automaticamente al lado de la niña. Funciona tambien desde
-  la camara libre y no mueve ni anima a la niña congelada.
+  la camara libre y no mueve ni anima a la niña congelada. Se desactiva a bordo.
 - **Tercera persona:** WASD mueve a la niña; Shift corre; raton orbita; rueda acerca/aleja.
 - **Camara libre:** WASD vuela en la direccion de la mirada; E/Q sube/baja;
   Shift acelera y la rueda cambia el campo de vision.
 - En camara libre la niña queda completamente congelada: posicion, orientacion,
   velocidad, correccion de altura, reloj de animacion y matrices de huesos.
   Los controles del personaje vuelven a activarse al pulsar C.
+  Si se esta navegando, C tambien detiene y congela el bote y ambos pasajeros;
+  al volver se recupera el control del barco, sin activar la caminata.
 - **R:** en tercera persona reinicia la escena; en camara libre solo reinicia la camara.
 - **Tab:** liberar/capturar cursor. **Esc:** salir.
 
@@ -35,8 +42,8 @@ El modelo activo es **`Models/NinaRig/NinaRig.fbx`**. Blender genero:
   Idle 77_02. Sustituyen los ciclos de extremidades sintetizados con senos.
 - Retarget por direcciones articulares y marcos anatomicos, correccion de contacto
   de suelas y alineacion de la fase del pie izquierdo entre marcha y carrera.
-- Codos de marcha aproximadamente 6 a 48 grados y rodillas hasta 70; en carrera
-  los codos conservan flexion variable hasta 94 grados y las rodillas hasta 116.
+- Codos de marcha aproximadamente 6 a 45 grados y rodillas hasta 70; en carrera
+  conservan flexion variable hasta 86 grados y las rodillas hasta 116.
 - Contacto de las suelas horneado en cada keyframe para mantener los pies sobre
   el suelo durante la flexion y el balanceo del cuerpo.
 - Versiones `.blend`, `.fbx` y `.glb`, con ocho texturas copiadas a nombres ASCII.
@@ -48,24 +55,36 @@ skinning a cuatro influencias y admite hasta 48 huesos. La conversion FBX de
 unidades no cambia la cadencia, que se calcula respecto a la altura del personaje.
 La geometria original y el archivo Blender original se conservan.
 
-El modelo activo tiene geometria de hombros reconstruida: sockets mas exteriores,
-humero de 0.16 y antebrazo de 0.135 unidades del modelo, brazos un 22% mas delgados
-y manos un 30% mas delgadas. Las mangas se prolongan hasta los nuevos sockets;
-sus pesos y los de la raiz del brazo se mezclan gradualmente con Chest. Esto evita
-que el extremo interior del cilindro del brazo rote rigidamente dentro del torso.
-Se exportan estas modificaciones reales a FBX, GLB y BLEND.
+El modelo activo restaura la playera EXACTA del OBJ original: 290 vertices,
+272 caras y las mismas UV. No se alarga, afina ni subdivide; su union rigida con
+Chest impide que los brazos estiren la tela. El manifiesto guarda dos SHA-256
+iguales de posiciones/topologia/UV, antes y despues de generar la pose de enlace.
+Solo se modifica la malla de piel de brazos y manos. Se midio la muñeca REAL del
+OBJ en X=0.39: el mapa anterior ponia esa zona de palma en el antebrazo. Ahora el
+humero mide 0.115 y el antebrazo 0.105, con grosor al 95% del original. Se recupera
+longitud de brazo y se reduce TODA la palma/dedos al 40% en XYZ a partir de esa
+muñeca, con transicion suave. La mano visible mide aproximadamente
+0.079 x 0.023 x 0.087 unidades del modelo. Sus pesos pertenecen al hueso Hand;
+el manifiesto conserva estas medidas y la verificacion de tamaño. La longitud
+hombro-palma es 0.304, frente a 0.235 en la version demasiado corta.
+Los sockets permanecen en X=+/-0.17, dentro de las mangas
+originales; las claviculas conservan su posicion relativa al pecho durante el
+retarget, evitando que la captura adulta ensanche los hombros. La raiz de piel
+se mezcla gradualmente con Chest. Se exportan los cambios a FBX, GLB y BLEND.
 `shoulder-clearance-audit.json` comprueba por interseccion de triangulos las
 superficies deformadas de brazos y torso en 230 fotogramas de los tres clips;
-excluye solamente la costura de pesos compartidos del hombro.
+excluye la union de pesos compartidos y el socket bajo las mangas cortas originales.
 
 `arm-limits.txt` es el perfil compartido por Blender y C++: balanceo del humero
-entre -30 y 45 grados, abduccion 12 a 28 y codo entre 6 y 100 grados. El retarget
+entre -30 y 45 grados, abduccion 18 a 28 y codo entre 6 y 100 grados. El retarget
 comprime suavemente los gestos mas cerrados del adulto para conservar su variacion
 sin pegar todo el ciclo al limite. Se mantienen munecas y palmas por debajo del
 hombro con margen para el volumen real de las manos. La proteccion de
 `SkeletalAnimator.h` se aplica DESPUES de toda mezcla y antes de propagar hijos,
 por lo que tambien limita poses intermedias y overlays. `arm-safety-audit.json`
 registra la altura maxima de vertices de antebrazos/manos en todos los keyframes.
+Los dos ultimos valores del perfil mantienen antebrazos y palmas hacia el lado
+exterior del torso; se aplican tanto en Blender como despues de mezclar en C++.
 
 Para regenerar el rig con Blender instalado desde Microsoft Store, ejecutar desde
 la carpeta de la solucion:
@@ -212,13 +231,20 @@ borrosas y sin modificar las UV de personajes, flores u otros escenarios.
 El escenario unificado `Models/EntornoCompleto/EntornoCompleto.obj` se carga una vez.
 Assimp importa en segundo plano; los recursos OpenGL se crean en el hilo principal.
 Se omiten mallas fuera de vista y no se conservan copias de su geometria en RAM.
+Las mallas estaticas grandes se dividen en sectores de 16 unidades fuente. Cada
+sector conserva sus limites geometricos completos; `glMultiDrawElements` envia
+solo los sectores visibles, manteniendo un VBO/EBO por material. Asi una hoja o
+arbusto visible ya no obliga a enviar toda la vegetacion del Zocalo.
 
 El cargador separa las ocho bancas fusionadas de LoD_0SG por su ubicacion. Cada
 banca usa una matriz local con escala **0.45**, anclada al pie y al nivel del piso;
 no se reduce el anillo completo de posiciones alrededor de la plaza. El kiosko
-Material.014 y su conjunto central (.004/.005/.007) usan escala **1.6** alrededor
-del centro a nivel del suelo. Las cotas y los triangulos usados para detectar
-altura reciben las mismas transformaciones que el render.
+Material.014 conserva escala **1.6** alrededor del centro a nivel del suelo.
+La fuente (.004 cuenco, .005 agua y .007 columna) tiene OTRA matriz local,
+anclada en su propio centro con escala **0.80** (mitad del tamano anterior).
+Su ancho es 8.5368 unidades fuente y cabe holgadamente dentro de los pilares.
+Las cotas y los triangulos usados para detectar altura reciben las mismas
+transformaciones que el render.
 
 Hay **12 farolas**: las ocho interiores (cuatro esquinas y cuatro alrededor del
 quiosco) mas cuatro nuevas en las esquinas exteriores, inmediatamente despues
@@ -264,6 +290,105 @@ textureGrad mantiene el LOD estable durante el desplazamiento. El agua
 escribe profundidad y queda ocluida por las plataformas y esculturas; se dibuja
 antes del skybox y de los planos transparentes.
 
+## Cerca perimetral de la Laguna
+
+`LakeFence.h` utiliza `images/Cerca_lago.png` en el pase compartido de quads RGBA.
+Rodea las cuatro caras del plano real del agua, 0.15 unidades hacia fuera, con
+146 paneles de altura visible 3.5 y juntas interiores solapadas 0.01 unidades.
+Se conserva el canal alfa, se recortan solo margenes transparentes en RAM y se
+usa descarte <0.1, GL_BLEND y SRC_ALPHA/ONE_MINUS_SRC_ALPHA. No se duplica textura
+por panel. Cada tramo se divide segun la proporcion visible de la imagen.
+
+La cara oeste se divide en DOS tramos: se mide TODO el muelle positivo en X de
+tarima_madera.001 y se reserva su intervalo Z mas 1.5 unidades a cada lado.
+La abertura queda Z=-64.391235..6.598602. Ningun quad entra en ese intervalo;
+se verifican los extremos reales de sus matrices, la continuidad en las otras
+caras y el ancho de paso con la huella del personaje. Las capturas 305/315
+revisan el acceso en ambos sentidos, 325 la baranda y 335 la fuente reducida.
+
+## Bote y navegacion
+
+`Models/barquito.obj` contiene 412 vertices y 108 caras (196 triangulos despues
+de Assimp), generados directamente: casco con quilla, fondo interior, borda,
+tablones y dos bancos. `barquito.mtl` define cinco tonos cafe madera. No necesita
+texturas externas. Mide 4.6 de ancho por 7.7 de largo; su linea de flotacion local
+es Y=0 y la quilla llega a Y=-0.45. Se importa una sola vez antes del render loop.
+
+`BoatNavigation.h` administra Caminando/Navegando. El amarre inicial se mide
+desde el borde este del muelle: centro fuente aproximadamente
+(77.828, 0.514682, -28.896), con proa hacia +X. E usa proximidad a la AABB del
+casco ampliada 2.5 unidades y comprueba tambien altura. A bordo se cancelan
+caminata/accion del perro, se congela la pose Idle de los dos esqueletos y se
+colocan ambos sobre el fondo del casco usando su transformacion completa.
+
+W/S controla velocidad (8 unidades/s, 12 con Shift, marcha atras 4); A/D controla
+velocidad angular amortiguada. Se integran aceleracion y giro con deltaTime y
+subpasos. La traslacion Y se asigna EXACTAMENTE al nivel del agua cada frame.
+Se comprueba todo el casco contra limites, tarimas y orillas antes de aceptar
+movimiento/rotacion; el bote no atraviesa las plataformas ni sale del lago.
+
+Se agregan franjas de desembarque de madera de 4 unidades de ancho junto a la
+cerca, dentro de las cuatro orillas, sin cerrar la entrada del muelle. Su suelo
+esta 0.65 unidades por encima del agua y sus triangulos se registran en el mismo
+GroundSurface usado por los personajes. Al pulsar E se buscan dos posiciones
+con soporte completo para niña y perro, incluida su huella y el offset de
+seguimiento. Si no existe suelo cercano, se permanece navegando. Al bajar,
+se restauran controles y seguimiento, y el bote queda inmovil en su ultima
+posicion. El movimiento a pie se detiene al intentar entrar en agua sin suelo.
+
+El bloqueo del acceso se debia a reutilizar FullSupport, que exige que todos los
+rayos de apoyo tengan menos de 0.45 unidades de diferencia de altura. En la union
+Pasillo/muelle el escalon mide aproximadamente 0.716 y los rayos tocaban ambos
+pisos. GuardWalking usa ahora apoyo parcial y la altura de paso del controlador,
+seguida por la misma correccion vertical de GroundSurface. FullSupport solo se
+usa para colocar ambos personajes de forma segura al desembarcar. La prueba
+camina desde 12 unidades antes de la tabla hasta el trigger, sin teletransportar
+al personaje al borde, y exige cero bloqueos a 30/60/144 FPS.
+
+## Rendimiento del render loop
+
+`Frustum.h` comparte planos normalizados entre entorno, farolas y billboards.
+Se descartan sectores estaticos, cada farola y cada plano de casas/arboles/cerca;
+tambien se omiten pasajeros, bote, orillas y agua fuera del campo de vision.
+Las cajas son conservadoras e incluyen el ancho completo de los quads y las
+transformaciones locales, evitando cortes o desapariciones en los bordes.
+
+Las farolas visibles usan glDrawElementsInstanced: dos lotes (metal/cristal).
+Los planos se compactan en un VBO de instancias y se dibujan por grupos contiguos
+de textura. Se conserva el orden GLOBAL de lejos a cerca, el alfa original y la
+mezcla SRC_ALPHA, incluyendo las dos caras cruzadas de cada arbol. La prueba en
+GPU compara los pixeles transparentes/semitransparentes de los dos caminos.
+
+`Shader.h` conserva las ubicaciones de uniforms por programa. `RenderState.h`
+evita repetir glUseProgram, bind de VAO/textura y material, y se invalida al
+empezar cada frame. Las matrices normales locales se calculan durante la carga;
+el render reutiliza la matriz de modelo entre materiales que comparten espacio.
+Los buffers/vectores de visibilidad se reutilizan entre cuadros.
+
+La simulacion subdivide los cuadros largos en pasos de hasta 1/60 s (1/120 para
+el seguimiento del xolo y la navegacion), conservando el deltaTime acumulado
+hasta 0.25 s. Movimiento, gravedad y amortiguacion usan tiempo; cada esqueleto se
+evalua una sola vez por cuadro, despues de todos los subpasos. La camara sigue
+suavemente el resultado al final del cuadro. V-Sync inicia en 0 para evitar que
+una caida ocasional fuerce saltos de 60 a 30 FPS; V permite activarlo en ejecucion.
+
+Medicion comparativa del mismo recorrido de 800 cuadros, 1280x720, Intel UHD
+Graphics y V-Sync desactivado en ambas ejecuciones (se excluyen los 30 primeros
+cuadros del resumen). No se reduce detalle ni se cambian los modelos:
+
+| Medida | Antes | Despues |
+|---|---:|---:|
+| Llamadas de dibujo medias/cuadro | 233.94 | 45.41 |
+| Triangulos enviados medios/cuadro | 2,782,327 | 1,123,457 |
+| CPU render mediana / p95 (ms) | 1.599 / 3.905 | 0.341 / 1.303 |
+| GPU mediana / p95 (ms) | 15.014 / 20.331 | 6.405 / 15.383 |
+
+Resultados crudos: `Proyecto/obj/validation/perf-before-performance.json` y
+`perf-after-performance.json`. Las capturas comparativas de plaza, arbol y
+muelle conservan la geometria visible; las diferencias del agua corresponden a
+su animacion temporal. La reduccion media es 80.6% en llamadas de dibujo y 59.6%
+en triangulos enviados, con 57.3% menos tiempo mediano de GPU en esta medicion.
+
 ## Validacion
 
 ```powershell
@@ -274,7 +399,7 @@ antes del skybox y de los planos transparentes.
 `--validate` prueba movimiento a distintos FPS, diagonales, escala UV y bloqueo
 de controles. Con el FBX real cargado, simula C y WASD y comprueba que las matrices
 de huesos y la posicion permanezcan exactamente iguales mientras la camara se mueve.
-Dibuja 620 frames con niña, xolo, agua, arboles, fachadas, luces y ambas camaras; verifica profundidad
+Dibuja 800 frames con niña, xolo, bote, agua, arboles, fachadas, luces y ambas camaras; verifica profundidad
 y errores de OpenGL. Mide la flexion de codos y rodillas en los clips importados,
 prueba entrada/salida de pasto a 30/60/144 FPS y comprueba las tapas elevadas del
 escenario real. Comprueba exactamente una iglesia, repeticion de las tres casas,
@@ -292,7 +417,20 @@ Comprueba 4500 poses/mezclas de brazos, la cobertura completa del muelle,
 la reproduccion sin bucle y el seguimiento/accion/regreso a 30/60/144 FPS. Simula la
 tecla F y captura las tres fases. `--validate-character` omite el entorno masivo
 y dibuja 420 frames con ambos personajes.
+Ambos modos prueban embarque, poses de pasajeros, distancia independiente de FPS,
+timon, altura exacta, colision de casco, desembarque/reembarque en las cuatro
+orillas y regreso al muelle a 30/60/144 FPS. La prueba completa usa el suelo real,
+simula E/F/C, verifica la pausa de bote/huesos en camara libre y guarda las
+capturas 610/640/670/690/720/750 de embarque, navegacion y desembarque.
+Ambos modos caminan hasta el borde del muelle y embarcan a 30/60/144 FPS; el
+modo completo usa el piso y el escalon originales del OBJ.
 Un segundo argumento opcional define el prefijo de capturas TGA.
+
+`--profile obj/validation/nombre` ejecuta el mismo recorrido y guarda
+`nombre-performance.json` con tiempos CPU/GPU, draw calls, triangulos enviados y
+objetos/sectores descartados por cuadro. Las consultas GPU son asincronas: solo
+se lee el resultado cuando esta disponible, sin detener el render. Los tiempos
+de render excluyen la carga de modelos y la lectura/guardado de capturas.
 
 La carga del OBJ de 325 MB puede tardar varios minutos. La navegacion ajusta
 la altura al terreno, pero no incluye colisiones solidas contra paredes.

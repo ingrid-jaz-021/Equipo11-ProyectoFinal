@@ -74,7 +74,7 @@ def set_world(rig,name,q):
 
 def limit_human_arms(rig,out):
     values=list(map(float,(Path(out)/'arm-limits.txt').read_text().splitlines()[0].split()))
-    back,front,inward,outward,min_flex,max_flex,clearance,hand_up=values
+    back,front,inward,outward,min_flex,max_flex,clearance,hand_up,forearm_side,hand_side=values
     chest=rig.pose.bones['Chest'];rotation=pose_matrix(chest).to_3x3()@chest.bone.matrix_local.to_3x3().inverted()
     up=(rotation@eng((0,1,0))).normalized();forward=(rotation@eng((0,0,1))).normalized();side=(rotation@eng((1,0,0))).normalized()
     def redirect(name,direction):
@@ -86,6 +86,11 @@ def limit_human_arms(rig,out):
         tangent=d-up*y
         if tangent.length<1e-6:tangent=forward
         return tangent.normalized()*math.sqrt(max(0,1-ceiling*ceiling))+up*ceiling
+    def outside(d,sign,minimum):
+        outward=side*sign;component=d.dot(outward)
+        if component>=minimum:return d
+        tangent=d-outward*component
+        return tangent.normalized()*math.sqrt(1-minimum*minimum)+outward*minimum
     for suffix,sign in [('.L',1),('.R',-1)]:
         upper='UpperArm'+suffix;forearm='Forearm'+suffix;hand='Hand'+suffix
         shoulder=pose_matrix(rig.pose.bones[upper]).translation
@@ -106,9 +111,9 @@ def limit_human_arms(rig,out):
         if bend.length<1e-6:bend=forward-u*forward.dot(u)
         d=u*math.cos(angle)+bend.normalized()*math.sin(angle)
         ceiling=max(-.98,min(.98,((shoulder-elbow).dot(up)-(elbow-shoulder).length*clearance)/v.length))
-        redirect(forearm,elevation(d,ceiling))
+        redirect(forearm,elevation(outside(d,sign,forearm_side),ceiling))
         palm=(pose_matrix(rig.pose.bones[hand]).to_3x3()@Vector((0,1,0))).normalized()
-        redirect(hand,elevation(palm,hand_up))
+        redirect(hand,elevation(outside(palm,sign,hand_side),hand_up))
 
 def audit_arm_vertices(rig,meshes,out):
     selected={}
@@ -147,11 +152,15 @@ def audit_shoulder_clearance(rig,meshes,out):
         groups={g.index:g.name for g in obj.vertex_groups}
         arm_weights=[sum(g.weight for g in v.groups if groups[g.group].startswith(('UpperArm.','Forearm.','Hand.'))) for v in obj.data.vertices]
         obj.data.calc_loop_triangles()
+        # Short original sleeves surround the joint deliberately; exclude that
+        # socket, but test every distal arm surface against the original torso.
+        shoulders=[b.head_local for b in rig.data.bones if b.name.startswith('UpperArm.')]
+        outside_socket=[min((v.co-p).length for p in shoulders)>.08 for v in obj.data.vertices]
         if obj.name=='Hand_L.003':
-            triangles=[tuple(t.vertices) for t in obj.data.loop_triangles if all(arm_weights[i]>.95 for i in t.vertices)]
+            triangles=[tuple(t.vertices) for t in obj.data.loop_triangles if all(arm_weights[i]>.95 and outside_socket[i] for i in t.vertices)]
             parts.append((obj,'arm',triangles))
         elif obj.name=='Hand_L.002':
-            triangles=[tuple(t.vertices) for t in obj.data.loop_triangles if all(arm_weights[i]<.05 for i in t.vertices)]
+            triangles=[tuple(t.vertices) for t in obj.data.loop_triangles if all(outside_socket[i] for i in t.vertices)]
             parts.append((obj,'torso',triangles))
     if {p[1] for p in parts}!={'arm','torso'}:raise RuntimeError('Faltan las superficies de brazos/torso para auditar hombros.')
     result={}
@@ -164,7 +173,7 @@ def audit_shoulder_clearance(rig,meshes,out):
                 trees[kind]=BVHTree.FromPolygons([evaluated.matrix_world@v.co for v in evaluated.data.vertices],triangles,all_triangles=True)
             collisions+=len(trees['arm'].overlap(trees['torso']))
         result[clip]={'frames':int(action.frame_range[1])+1,'arm_torso_triangle_intersections':collisions,
-            'attachment_seam_excluded':'arm weights .05.. .95'}
+            'attachment_seam_excluded':'original short sleeves/socket radius .08; arm weights .05.. .95'}
     (Path(out)/'shoulder-clearance-audit.json').write_text(json.dumps(result,indent=2))
     if any(v['arm_torso_triangle_intersections'] for v in result.values()):
         raise RuntimeError('La malla de los brazos atraviesa el torso: '+str(result))
@@ -175,7 +184,9 @@ def bake_mocap(rig,meshes,out):
     mappings={'Hips':('Hips','Spine'),'Spine':('Spine','Spine1'),'Chest':('Spine1','Neck1'),
         'Neck':('Neck1','Head'),'Head':('Head','Head_End')}
     for side,src in [('L','Left'),('R','Right')]:
-        for dest,pair in [('Clavicle',('Spine1',src+'Arm')),('UpperArm',(src+'Arm',src+'ForeArm')),
+        # Keep shoulder sockets attached to the original chest instead of
+        # stretching clavicles toward the adult capture's wider shoulders.
+        for dest,pair in [('UpperArm',(src+'Arm',src+'ForeArm')),
             ('Forearm',(src+'ForeArm',src+'Hand')),('Hand',(src+'Hand',src+'HandIndex1')),
             ('Thigh',(src+'UpLeg',src+'Leg')),('Shin',(src+'Leg',src+'Foot')),
             ('Foot',(src+'Foot',src+'ToeBase')),('Toe',(src+'ToeBase',src+'ToeBase_End'))]:mappings[dest+'.'+side]=pair

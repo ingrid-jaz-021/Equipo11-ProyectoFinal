@@ -75,6 +75,8 @@ StyleCopReport.xml
 *.ilk
 *.meta
 *.obj
+# Modelo OBJ de la escena, no un archivo objeto del compilador.
+!/Proyecto/Models/barquito.obj
 *.iobj
 *.pch
 *.pdb

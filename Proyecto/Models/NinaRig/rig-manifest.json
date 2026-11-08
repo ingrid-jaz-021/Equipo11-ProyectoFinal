@@ -45,16 +45,16 @@
   "joint_ranges_degrees": {
     "Idle": {
       "elbowL": {
-        "min": 20.28432482540784,
-        "max": 22.719176273943372
+        "min": 20.284335070691597,
+        "max": 22.719184811679835
       },
       "kneeL": {
         "min": 13.685666261653829,
         "max": 18.431207418671463
       },
       "elbowR": {
-        "min": 24.504633826761605,
-        "max": 27.113412627416928
+        "min": 24.50465090223453,
+        "max": 27.113404089680465
       },
       "kneeR": {
         "min": 0.0,
@@ -64,15 +64,15 @@
     "Walk": {
       "elbowL": {
         "min": 5.999988641020987,
-        "max": 48.20947299228222
+        "max": 45.20842788985661
       },
       "kneeL": {
         "min": 0.0,
         "max": 67.80268000388045
       },
       "elbowR": {
-        "min": 12.960575940686214,
-        "max": 47.97614348495083
+        "min": 12.960606676537479,
+        "max": 45.817171914728576
       },
       "kneeR": {
         "min": 0.0,
@@ -81,16 +81,16 @@
     },
     "Run": {
       "elbowL": {
-        "min": 80.35329603775145,
-        "max": 93.99457716885759
+        "min": 76.31431831357777,
+        "max": 85.54065395764688
       },
       "kneeL": {
         "min": 0.0,
         "max": 116.29603273354132
       },
       "elbowR": {
-        "min": 63.50461271392067,
-        "max": 86.60795297773141
+        "min": 63.504599053542336,
+        "max": 80.98803917769908
       },
       "kneeR": {
         "min": 0.0,
@@ -100,22 +100,37 @@
   },
   "shoulder_geometry": {
     "modified_vertices": {
-      "Hand_L.002": 76,
       "Hand_L.003": 1414
     },
     "t_pose_joint_x": {
-      "shoulder": 0.245,
-      "elbow": 0.405,
-      "wrist": 0.54,
-      "palm_tip": 0.585
+      "shoulder": 0.17,
+      "elbow": 0.285,
+      "wrist": 0.39,
+      "palm_tip": 0.474
     },
-    "upper_arm_length": 0.16,
-    "forearm_length": 0.135,
+    "upper_arm_length": 0.115,
+    "forearm_length": 0.105,
     "arm_radial_scale": [
-      0.78,
-      0.7
+      0.95,
+      0.4
     ],
-    "root_weights": "Chest -> UpperArm, smooth transition x=.20.. .275; shared with sleeve"
+    "hand_source_wrist_x": 0.39,
+    "hand_scale_xyz": 0.4,
+    "hand_bounds_size_blender": [
+      0.07888039946556091,
+      0.08746400102972984,
+      0.023002684116363525
+    ],
+    "shoulder_to_palm_length": 0.304,
+    "previous_shoulder_to_palm_length": 0.235,
+    "root_weights": "Chest -> UpperArm, smooth transition x=.13.. .195; original shirt has no arm weights",
+    "original_shirt": {
+      "vertices": 290,
+      "polygons": 272,
+      "source_sha256": "aede346aafbdee781eeee0f3f75fca373d95495dbe9ad537ba0caedea2f4dc41",
+      "export_sha256": "aede346aafbdee781eeee0f3f75fca373d95495dbe9ad537ba0caedea2f4dc41",
+      "unchanged": true
+    }
   },
   "deformation_support_loops": 2,
   "foot_contact_baked": true,

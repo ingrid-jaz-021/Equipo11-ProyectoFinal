@@ -2,7 +2,7 @@
 Run: blender-launcher.exe --background --python build_nina_rig.py
 Original OBJ/BLEND are preserved. Outputs go to Models/NinaRig.
 """
-import bpy, bmesh, math, json, shutil, traceback
+import bpy, bmesh, math, json, shutil, traceback, hashlib, struct
 from pathlib import Path
 from mathutils import Vector, Quaternion
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,37 +14,41 @@ def smooth(t):
     return t*t*t*(t*(t*6-15)+10)
 def mix(a,b,t): return a+(b-a)*t
 def reshape_shoulders(meshes):
-    """Rebuild arm proportions in the source T pose, before skinning/export.
-
-    The old skin cylinders started INSIDE the chest, yet had 100% upper-arm
-    weights. Moving a shoulder therefore swung that hidden stub through the
-    shirt. Give the shoulder its own socket and blend that root to the chest.
+    """Keep real upper/forearm volume; shrink the entire hand from its TRUE wrist.
+    The source hand begins at x=.39, not .54: the thumb/palm must shrink too.
     """
-    source=(.12,.17,.37,.54,.60)
-    target=(.205,.245,.405,.54,.585)
+    source=(.12,.17,.28,.39,.60)
+    target=(.12,.17,.285,.39,.474)
     def longitudinal(x):
         if x<source[0]:return target[0]+(x-source[0])
         for i in range(len(source)-1):
             if x<=source[i+1]:return mix(target[i],target[i+1],(x-source[i])/(source[i+1]-source[i]))
-        return target[-1]+(x-source[-1])*.75
+        return target[-1]+(x-source[-1])*.40
     changed={}
     for obj in meshes:
-        if obj.name not in {'Hand_L.002','Hand_L.003'}:continue
+        if obj.name!='Hand_L.003':continue
         count=0
         for v in obj.data.vertices:
             x,y,z=v.co.x,v.co.z,-v.co.y;a=abs(x);sign=1 if x>=0 else -1
-            if obj.name=='Hand_L.003':
-                radius=mix(.78,.70,smooth((a-.40)/.13))
-                v.co=eng((sign*longitudinal(a),.685+(y-.685)*radius,.025+(z-.025)*radius));count+=1
-            elif y>.58 and a>.12:
-                # Extend only the sleeve/shoulder, keeping the shirt's waist.
-                blend=smooth((y-.58)/.045)*smooth((a-.12)/.04)
-                radius=1-.18*blend*smooth((a-.17)/.045)
-                v.co=eng((sign*mix(a,longitudinal(a),blend),.685+(y-.685)*radius,.025+(z-.025)*radius));count+=1
+            radius=mix(.95,.40,smooth((a-.37)/.04))
+            v.co=eng((sign*longitudinal(a),.685+(y-.685)*radius,.004+(z-.004)*radius));count+=1
         obj.data.update();changed[obj.name]=count
-    return {'modified_vertices':changed,'t_pose_joint_x':{'shoulder':.245,'elbow':.405,'wrist':.54,'palm_tip':.585},
-        'upper_arm_length':.16,'forearm_length':.135,'arm_radial_scale':[.78,.70],
-        'root_weights':'Chest -> UpperArm, smooth transition x=.20.. .275; shared with sleeve'}
+    hand=[v.co for o in meshes if o.name=='Hand_L.003' for v in o.data.vertices if v.co.x>.391]
+    hand_size=[max(p[i] for p in hand)-min(p[i] for p in hand) for i in range(3)]
+    if max(hand_size)>.11:raise RuntimeError('Las manos siguen fuera de proporcion.')
+    return {'modified_vertices':changed,'t_pose_joint_x':{'shoulder':.17,'elbow':.285,'wrist':.39,'palm_tip':.474},
+        'upper_arm_length':.115,'forearm_length':.105,'arm_radial_scale':[.95,.40],
+        'hand_source_wrist_x':.39,'hand_scale_xyz':.40,'hand_bounds_size_blender':hand_size,
+        'shoulder_to_palm_length':.304,'previous_shoulder_to_palm_length':.235,
+        'root_weights':'Chest -> UpperArm, smooth transition x=.13.. .195; original shirt has no arm weights'}
+def mesh_fingerprint(obj):
+    data=bytearray()
+    for v in obj.data.vertices:data.extend(struct.pack('<fff',*v.co))
+    for p in obj.data.polygons:
+        data.extend(struct.pack('<I',len(p.vertices)))
+        for index in p.vertices:data.extend(struct.pack('<I',index))
+    for uv in obj.data.uv_layers.active.data:data.extend(struct.pack('<ff',*uv.uv))
+    return hashlib.sha256(data).hexdigest()
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.context.preferences.filepaths.save_version=0
@@ -56,9 +60,11 @@ def main():
         obj.select_set(True)
         bpy.ops.object.transform_apply(location=True,rotation=True,scale=True)
         obj.select_set(False)
+    shirt=next(o for o in meshes if o.name=='Hand_L.002')
+    original_shirt=mesh_fingerprint(shirt)
     geometry=reshape_shoulders(meshes)
     for obj in meshes:
-        if obj.name in {"Hand_L.002","Hand_L.003","Hand_L.004"}:
+        if obj.name in {"Hand_L.003","Hand_L.004"}:
             bm=bmesh.new();bm.from_mesh(obj.data)
             bmesh.ops.subdivide_edges(bm,edges=list(bm.edges),cuts=2,use_grid_fill=True)
             bmesh.ops.recalc_face_normals(bm,faces=list(bm.faces))
@@ -103,10 +109,10 @@ def main():
     bone("Neck",(0,0.74,0.015),(0,0.82,0.015),"Chest",True)
     bone("Head",(0,0.82,0.015),(0,1.20,0.015),"Neck",True)
     for side,sign in [("L",1),("R",-1)]:
-        bone("Clavicle."+side,(sign*0.045,0.685,0.025),(sign*0.245,0.685,0.025),"Chest")
-        bone("UpperArm."+side,(sign*0.245,0.685,0.025),(sign*0.405,0.685,0.025),"Clavicle."+side,True)
-        bone("Forearm."+side,(sign*0.405,0.685,0.025),(sign*0.54,0.685,0.025),"UpperArm."+side,True)
-        bone("Hand."+side,(sign*0.54,0.685,0.025),(sign*0.585,0.685,0.025),"Forearm."+side,True)
+        bone("Clavicle."+side,(sign*0.045,0.685,0.004),(sign*0.17,0.685,0.004),"Chest")
+        bone("UpperArm."+side,(sign*0.17,0.685,0.004),(sign*0.285,0.685,0.004),"Clavicle."+side,True)
+        bone("Forearm."+side,(sign*0.285,0.685,0.004),(sign*0.39,0.685,0.004),"UpperArm."+side,True)
+        bone("Hand."+side,(sign*0.39,0.685,0.004),(sign*0.474,0.685,0.004),"Forearm."+side,True)
         bone("Thigh."+side,(sign*0.095,0.43,0.015),(sign*0.105,0.255,0.015),"Hips")
         bone("Shin."+side,(sign*0.105,0.255,0.015),(sign*0.105,0.105,0.025),"Thigh."+side,True)
         bone("Foot."+side,(sign*0.105,0.105,0.025),(sign*0.105,0.045,0.145),"Shin."+side,True)
@@ -123,12 +129,14 @@ def main():
             x,y,z=v.co.x,v.co.z,-v.co.y
             s="L" if x>=0 else "R";m=vertex_material.get(v.index,"")
             weights={}
-            if m=="skin.002" or (m=="Tshirt" and y>0.60 and abs(x)>0.20):
-                # Skin root and sleeve MUST share the same gradual attachment.
-                # No rigid inward stub rotating through the shoulder socket.
-                armw=smooth((abs(x)-0.20)/0.075)
-                elbow=smooth((abs(x)-0.375)/0.06)
-                wrist=smooth((abs(x)-0.515)/0.05)
+            if obj.name=='Hand_L.002':
+                # Rigid torso attachment preserves ALL shirt vertices/proportions,
+                # including sleeves, during bind-pose baking and locomotion.
+                weights={"Chest":1.0}
+            elif m=="skin.002":
+                armw=smooth((abs(x)-0.13)/0.065)
+                elbow=smooth((abs(x)-0.265)/0.04)
+                wrist=smooth((abs(x)-0.375)/0.03)
                 weights={"Chest":1-armw,"UpperArm."+s:armw*(1-elbow),
                     "Forearm."+s:armw*elbow*(1-wrist),"Hand."+s:armw*elbow*wrist}
             elif y<0.47 and m!="Tshirt":
@@ -167,6 +175,10 @@ def main():
     for o in meshes:
         for v,co in zip(o.data.vertices,baked[o.name]): v.co=co
         o.data.update()
+    if mesh_fingerprint(shirt)!=original_shirt:
+        raise RuntimeError('La geometria/UV original de la playera fue modificada.')
+    geometry['original_shirt']={'vertices':len(shirt.data.vertices),'polygons':len(shirt.data.polygons),
+        'source_sha256':original_shirt,'export_sha256':mesh_fingerprint(shirt),'unchanged':True}
     import sys
     sys.path.insert(0,str(ROOT/"tools"))
     from mocap_retarget import bake_mocap

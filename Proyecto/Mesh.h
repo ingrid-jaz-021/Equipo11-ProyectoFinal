@@ -1,11 +1,16 @@
 #pragma once
 #include <array>
 #include <cstddef>
+#include <cmath>
+#include <map>
+#include <limits>
 #include <vector>
 #include <GL/glew.h>
 #include <glm/glm.hpp>
 #include "Shader.h"
 #include "Skinning.h"
+#include "RenderMetrics.h"
+#include "Frustum.h"
 
 struct Vertex
 {
@@ -27,10 +32,14 @@ class Mesh
 public:
     Mesh(const std::vector<Vertex>& vertices, const std::vector<GLuint>& indices,
         const MeshMaterial& material, const glm::vec3& minBounds, const glm::vec3& maxBounds,
-        const std::vector<SkinVertex>& skin = {},const glm::mat4& localTransform=glm::mat4(1))
+        const std::vector<SkinVertex>& skin = {},const glm::mat4& localTransform=glm::mat4(1),bool spatial=false)
         : material(material), minBounds(minBounds), maxBounds(maxBounds),
         indexCount(static_cast<GLsizei>(indices.size())),localTransform(localTransform)
     {
+        localNormal=glm::transpose(glm::inverse(glm::mat3(localTransform)));identityTransform=localTransform==glm::mat4(1);
+        std::vector<GLuint> reordered;
+        if(spatial&&skin.empty()&&indices.size()>12000)BuildChunks(vertices,indices,reordered);
+        const auto& gpuIndices=reordered.empty()?indices:reordered;
         glGenVertexArrays(1, &VAO);
         glGenBuffers(1, &VBO);
         glGenBuffers(1, &EBO);
@@ -38,7 +47,7 @@ public:
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
         glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, gpuIndices.size() * sizeof(GLuint), gpuIndices.data(), GL_STATIC_DRAW);
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), nullptr);
         glEnableVertexAttribArray(1);
@@ -65,7 +74,8 @@ public:
     Mesh& operator=(const Mesh&) = delete;
     Mesh(Mesh&& other) noexcept : material(other.material), minBounds(other.minBounds),
         maxBounds(other.maxBounds), indexCount(other.indexCount),
-        VAO(other.VAO), VBO(other.VBO), EBO(other.EBO), skinVBO(other.skinVBO),localTransform(other.localTransform)
+        VAO(other.VAO), VBO(other.VBO), EBO(other.EBO), skinVBO(other.skinVBO),localTransform(other.localTransform),
+        localNormal(other.localNormal),identityTransform(other.identityTransform),chunks(std::move(other.chunks))
     {
         other.VAO = other.VBO = other.EBO = 0;
         other.skinVBO = 0;
@@ -80,6 +90,7 @@ public:
             VAO = other.VAO; VBO = other.VBO; EBO = other.EBO;
             skinVBO = other.skinVBO;
             localTransform=other.localTransform;
+            localNormal=other.localNormal;identityTransform=other.identityTransform;chunks=std::move(other.chunks);
             other.VAO = other.VBO = other.EBO = 0;
             other.skinVBO = 0;
         }
@@ -88,27 +99,41 @@ public:
 
     bool IsVisible(const std::array<glm::vec4, 6>& planes) const
     {
-        for (const glm::vec4& plane : planes)
-        {
-            const glm::vec3 positive(plane.x >= 0.0f ? maxBounds.x : minBounds.x,
-                plane.y >= 0.0f ? maxBounds.y : minBounds.y,
-                plane.z >= 0.0f ? maxBounds.z : minBounds.z);
-            if (glm::dot(glm::vec3(plane), positive) + plane.w < 0.0f) return false;
-        }
-        return true;
+        return BoundsVisible(planes,minBounds,maxBounds);
     }
     const glm::mat4& LocalTransform() const{return localTransform;}
+    const glm::mat3& LocalNormal() const{return localNormal;}
+    bool HasIdentityTransform() const{return identityTransform;}
 
-    void Draw(const Shader& shader) const
+    void Draw(const Shader& shader,const FrustumPlanes* planes=nullptr) const
     {
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, material.diffuseTexture);
-        glUniform1i(glGetUniformLocation(shader.Program, "material.hasDiffuseTexture"), material.diffuseTexture != 0);
-        glUniform3fv(glGetUniformLocation(shader.Program, "material.diffuseColor"), 1, &material.diffuseColor[0]);
-        glUniform3fv(glGetUniformLocation(shader.Program, "material.emissiveColor"), 1, &material.emissiveColor[0]);
-        glUniform1f(glGetUniformLocation(shader.Program, "material.opacity"), material.opacity);
-        glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, nullptr);
+        counts.clear();offsets.clear();uint64_t visibleIndices=0;
+        if(planes&&!chunks.empty())
+        {
+            for(const auto& chunk:chunks)
+                if(BoundsVisible(*planes,chunk.lo,chunk.hi))
+                {counts.push_back(chunk.count);offsets.push_back(reinterpret_cast<const void*>(chunk.byteOffset));visibleIndices+=chunk.count;}
+                else ++RenderMetrics::culled;
+            if(counts.empty())return;
+        }
+        BindMaterial(shader);RenderState::BindVao(VAO);
+        if(counts.empty()){glDrawElements(GL_TRIANGLES,indexCount,GL_UNSIGNED_INT,nullptr);RenderMetrics::Draw(indexCount);}
+        else
+        {
+            glMultiDrawElements(GL_TRIANGLES,counts.data(),GL_UNSIGNED_INT,offsets.data(),static_cast<GLsizei>(counts.size()));
+            RenderMetrics::Draw(visibleIndices);
+        }
+    }
+    void DrawInstanced(const Shader& shader,GLuint instanceBuffer,GLsizei count) const
+    {
+        if(!count)return;
+        BindMaterial(shader);RenderState::BindVao(VAO);glBindBuffer(GL_ARRAY_BUFFER,instanceBuffer);
+        for(GLuint col=0;col<4;++col)
+        {
+            glEnableVertexAttribArray(3+col);glVertexAttribPointer(3+col,4,GL_FLOAT,GL_FALSE,sizeof(glm::mat4),reinterpret_cast<void*>(sizeof(glm::vec4)*col));
+            glVertexAttribDivisor(3+col,1);
+        }
+        glDrawElementsInstanced(GL_TRIANGLES,indexCount,GL_UNSIGNED_INT,nullptr,count);RenderMetrics::Draw(indexCount,count);
     }
 
 private:
@@ -118,6 +143,36 @@ private:
     GLuint VAO = 0, VBO = 0, EBO = 0;
     GLuint skinVBO = 0;
     glm::mat4 localTransform=glm::mat4(1);
+    glm::mat3 localNormal=glm::mat3(1);bool identityTransform=true;
+    struct Chunk{glm::vec3 lo,hi;GLsizei count;uintptr_t byteOffset;};
+    std::vector<Chunk> chunks;
+    mutable std::vector<GLsizei> counts;mutable std::vector<const void*> offsets;
+    void BindMaterial(const Shader& shader) const
+    {
+        RenderState::BindTexture2D(material.diffuseTexture);
+        if(RenderState::material==&material)return;
+        glUniform1i(shader.Uniform("material.hasDiffuseTexture"),material.diffuseTexture!=0);
+        glUniform3fv(shader.Uniform("material.diffuseColor"),1,&material.diffuseColor[0]);
+        glUniform3fv(shader.Uniform("material.emissiveColor"),1,&material.emissiveColor[0]);
+        glUniform1f(shader.Uniform("material.opacity"),material.opacity);RenderState::material=&material;
+    }
+    void BuildChunks(const std::vector<Vertex>& vertices,const std::vector<GLuint>& indices,std::vector<GLuint>& reordered)
+    {
+        struct Bin{std::vector<GLuint> indices;glm::vec3 lo=glm::vec3((std::numeric_limits<float>::max)()),hi=glm::vec3((std::numeric_limits<float>::lowest)());};
+        std::map<std::pair<int,int>,Bin> bins;
+        for(size_t i=0;i+2<indices.size();i+=3)
+        {
+            const auto p=(vertices[indices[i]].Position+vertices[indices[i+1]].Position+vertices[indices[i+2]].Position)/3.0f;
+            auto& bin=bins[{static_cast<int>(std::floor(p.x/16)),static_cast<int>(std::floor(p.z/16))}];
+            for(int j=0;j<3;++j){const auto id=indices[i+j];bin.indices.push_back(id);bin.lo=glm::min(bin.lo,vertices[id].Position);bin.hi=glm::max(bin.hi,vertices[id].Position);}
+        }
+        reordered.reserve(indices.size());chunks.reserve(bins.size());counts.reserve(bins.size());offsets.reserve(bins.size());
+        for(const auto& item:bins)
+        {
+            const auto& bin=item.second;chunks.push_back({bin.lo,bin.hi,static_cast<GLsizei>(bin.indices.size()),reordered.size()*sizeof(GLuint)});
+            reordered.insert(reordered.end(),bin.indices.begin(),bin.indices.end());
+        }
+    }
     void Release()
     {
         if (skinVBO) glDeleteBuffers(1, &skinVBO);

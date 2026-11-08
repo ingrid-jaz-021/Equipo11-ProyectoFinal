@@ -30,7 +30,7 @@ class SkeletalAnimator
     std::vector<glm::mat4> restGlobalPose;
     struct ArmLimit {int upper,forearm,hand,chest,sign;glm::vec3 up,side,forward,elbowOffset,wristOffset,palm;};
     std::vector<ArmLimit> armLimits;
-    struct {float back=-30,front=45,inward=12,outward=28,minFlex=6,maxFlex=100,clearance=.55f,handUp=.15f;} armSettings;
+    struct {float back=-30,front=45,inward=18,outward=28,minFlex=6,maxFlex=100,clearance=.55f,handUp=.15f,forearmSide=.10f,handSide=0;} armSettings;
     std::unordered_map<std::string,std::pair<unsigned,float>> influenceStats;
     glm::mat4 inverseRoot = glm::mat4(1);
     int idle = -1, walk = -1, run = -1;
@@ -46,7 +46,7 @@ class SkeletalAnimator
         }
         if(!nodeIds.count("UpperArm.L")||!nodeIds.count("UpperArm.R"))return;
         std::ifstream input("Models/NinaRig/arm-limits.txt");
-        if(!(input>>armSettings.back>>armSettings.front>>armSettings.inward>>armSettings.outward>>armSettings.minFlex>>armSettings.maxFlex>>armSettings.clearance>>armSettings.handUp))
+        if(!(input>>armSettings.back>>armSettings.front>>armSettings.inward>>armSettings.outward>>armSettings.minFlex>>armSettings.maxFlex>>armSettings.clearance>>armSettings.handUp>>armSettings.forearmSide>>armSettings.handSide))
             throw std::runtime_error("Falta el perfil obligatorio de limites anatomicos de la nina.");
         const int chest=nodeIds.at("Chest"),neck=nodeIds.at("Neck");
         const auto up=glm::normalize(glm::vec3(restGlobalPose[neck][3]-restGlobalPose[chest][3]));
@@ -81,6 +81,12 @@ class SkeletalAnimator
         const glm::vec3 pivot=glm::vec3(pose[3]);
         pose=glm::translate(glm::mat4(1),pivot)*glm::mat4_cast(q)*glm::translate(glm::mat4(1),-pivot)*pose;
     }
+    static glm::vec3 KeepOutside(glm::vec3 direction,glm::vec3 outward,float minimum)
+    {
+        direction=glm::normalize(direction);const float component=glm::dot(direction,outward);
+        if(component>=minimum)return direction;
+        return glm::normalize(direction-outward*component)*std::sqrt(1-minimum*minimum)+outward*minimum;
+    }
     void ConstrainArm(int node)
     {
         for(const auto& arm:armLimits)
@@ -108,13 +114,13 @@ class SkeletalAnimator
                 if(glm::length(bend)<.00001f)bend=forward-upper*glm::dot(upper,forward);
                 direction=upper*std::cos(limited)+glm::normalize(bend)*std::sin(limited);
                 const float maxY=glm::clamp((glm::dot(shoulder-elbow,up)-glm::length(elbow-shoulder)*armSettings.clearance)/glm::length(wrist),-.98f,.98f);
-                direction=LimitElevation(direction,up,maxY,forward);
+                direction=LimitElevation(KeepOutside(direction,side*static_cast<float>(arm.sign),armSettings.forearmSide),up,maxY,forward);
                 Redirect(pose,wrist,direction);
             }
             else
             {
                 const auto palm=glm::mat3(pose)*arm.palm;
-                Redirect(pose,palm,LimitElevation(palm,up,armSettings.handUp,forward));
+                Redirect(pose,palm,LimitElevation(KeepOutside(palm,side*static_cast<float>(arm.sign),armSettings.handSide),up,armSettings.handUp,forward));
             }
         }
     }
