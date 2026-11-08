@@ -23,17 +23,30 @@ public:
     }
     bool TriggerSpecial()
     {
-        if(!rig||state==State::Special)return false;
+        if(!rig||IsFrozen()||state==State::Special)return false;
         state=State::Special;clock=0;actionStart=position;actionForward=Forward();return true;
     }
     bool IsSpecial() const{return state==State::Special;}
     float ActionTime() const{return clock;}
-    void UpdateCompanion(const CharacterController& owner,const GroundSurface* ground,const glm::vec3& origin,float scale,float dt)
+    void PreparePassenger(){state=State::Following;clock=0;CharacterController::PreparePassenger();}
+    void UpdateCompanion(const CharacterController& owner,const GroundSurface* ground,const glm::vec3& origin,float scale,float dt,bool animate=true)
     {
-        if(!rig)return;
+        if(!rig||IsFrozen())return;
         // Subpasos mantienen estable el seguimiento y evitan saltarse bordes.
         const int steps=std::max(1,static_cast<int>(std::ceil(dt*120)));
         for(int step=0;step<steps;++step)Tick(owner,ground,origin,scale,dt/steps);
+        if(animate)AnimateFrame(dt);
+    }
+    void AnimateFrame(float dt)
+    {
+        if(!rig||IsFrozen())return;
+        if(state==State::Special)
+        {
+            const float duration=rig->Duration("Special");
+            const float blend=Ease(clock/.18f)*Ease((duration-clock)/.22f);
+            rig->UpdateLayered(dt,phase,gait,running,"Special",clock,blend);
+        }
+        else rig->Update(dt,phase,gait,running);
     }
 private:
     SkeletalAnimator* rig=nullptr;State state=State::Following;
@@ -71,13 +84,6 @@ private:
         gait=glm::mix(gait,state==State::Special?0.0f:glm::clamp(speed/1.2f,0.0f,1.0f),1-std::exp(-10.0f*dt));
         phase=std::fmod(phase+std::min(glm::length(delta)*6.28318530718f/(height*glm::mix(.85f,1.25f,running)),dt*6.28318530718f*4.2f),6.28318530718f);
         if(ground)ConformToGround(*ground,origin,scale,dt,MovementSettings::CharacterHeight*.8f);
-        if(state==State::Special)
-        {
-            const float duration=rig->Duration("Special");
-            const float blend=Ease(clock/.18f)*Ease((duration-clock)/.22f);
-            rig->UpdateLayered(dt,phase,gait,running,"Special",clock,blend);
-            if(clock>=duration){state=State::Following;velocity=glm::vec3(0);}
-        }
-        else rig->Update(dt,phase,gait,running);
+        if(state==State::Special&&clock>=rig->Duration("Special")){state=State::Following;velocity=glm::vec3(0);}
     }
 };

@@ -75,6 +75,10 @@ StyleCopReport.xml
 *.ilk
 *.meta
 *.obj
+# Modelo OBJ de la escena, no un archivo objeto del compilador.
+!/Proyecto/Models/barquito.obj
+!/Proyecto/Models/Persona Kiosko/PersonaZoc.obj
+!/Proyecto/Models/Pan de muerto/PanMuerto.obj
 *.iobj
 *.pch
 *.pdb

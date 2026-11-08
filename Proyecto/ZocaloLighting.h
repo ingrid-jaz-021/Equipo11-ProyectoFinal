@@ -135,8 +135,8 @@ public:
     void Upload(const Shader& shader) const
     {
         shader.Use();
-        glUniform1i(glGetUniformLocation(shader.Program, "pointLightCount"), static_cast<int>(Count));
-        glUniform4fv(glGetUniformLocation(shader.Program, "pointLightRegion"), 1, &region[0]);
+        glUniform1i(shader.Uniform("pointLightCount"), static_cast<int>(Count));
+        glUniform4fv(shader.Uniform("pointLightRegion"), 1, &region[0]);
         for (size_t i = 0; i < instances.size(); ++i)
         {
             const std::string prefix = "pointLights[" + std::to_string(i) + "].";

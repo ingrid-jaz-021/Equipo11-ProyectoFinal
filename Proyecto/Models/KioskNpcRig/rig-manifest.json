@@ -1,0 +1,122 @@
+{
+  "clips": {
+    "Idle": {
+      "seconds": 3.0,
+      "frames": 181,
+      "hand_first_blender": [
+        -0.13927710056304932,
+        -0.09566240757703781,
+        0.5727717280387878
+      ],
+      "hand_last_blender": [
+        -0.13927710056304932,
+        -0.09566240757703781,
+        0.5727717280387878
+      ]
+    },
+    "ReachPocket": {
+      "seconds": 1.2,
+      "frames": 73,
+      "hand_first_blender": [
+        -0.13927710056304932,
+        -0.09566240757703781,
+        0.5727717280387878
+      ],
+      "hand_last_blender": [
+        -0.10499981790781021,
+        -0.05499995872378349,
+        0.5900000929832458
+      ]
+    },
+    "Appear": {
+      "seconds": 0.6,
+      "frames": 37,
+      "hand_first_blender": [
+        -0.10499981790781021,
+        -0.05499995872378349,
+        0.5900000929832458
+      ],
+      "hand_last_blender": [
+        -0.10499981790781021,
+        -0.05499995872378349,
+        0.5900000929832458
+      ]
+    },
+    "RaiseBread": {
+      "seconds": 1.2,
+      "frames": 73,
+      "hand_first_blender": [
+        -0.10499981790781021,
+        -0.05499995872378349,
+        0.5900000929832458
+      ],
+      "hand_last_blender": [
+        -0.05999995768070221,
+        -0.0849999487400055,
+        0.8399999141693115
+      ]
+    },
+    "Eat": {
+      "seconds": 3.3,
+      "frames": 199,
+      "hand_first_blender": [
+        -0.05999995768070221,
+        -0.0849999487400055,
+        0.8399999141693115
+      ],
+      "hand_last_blender": [
+        -0.05999995768070221,
+        -0.0849999487400055,
+        0.8399999141693115
+      ]
+    },
+    "ReturnHand": {
+      "seconds": 1.4,
+      "frames": 85,
+      "hand_first_blender": [
+        -0.05999995768070221,
+        -0.0849999487400055,
+        0.8399999141693115
+      ],
+      "hand_last_blender": [
+        -0.13927710056304932,
+        -0.09566240757703781,
+        0.5727717280387878
+      ]
+    }
+  },
+  "bones": [
+    "NpcRoot",
+    "NpcHips",
+    "NpcSpine",
+    "NpcChest",
+    "NpcNeck",
+    "NpcHead",
+    "NpcClavicle.L",
+    "NpcUpperArm.L",
+    "NpcForearm.L",
+    "NpcHand.L",
+    "NpcClavicle.R",
+    "NpcUpperArm.R",
+    "NpcForearm.R",
+    "NpcHand.R",
+    "NpcThigh.L",
+    "NpcShin.L",
+    "NpcFoot.L",
+    "NpcThigh.R",
+    "NpcShin.R",
+    "NpcFoot.R",
+    "NpcSeatAnchor",
+    "NpcScaleBottom",
+    "NpcScaleTop"
+  ],
+  "source_height": 0.6593099905876443,
+  "source_center_x": -0.800000011920929,
+  "seat_anchor": [
+    0,
+    0.485,
+    -0.015
+  ],
+  "normalized_standing_height": 1,
+  "posed_floor": 0.2091030776500702
+}

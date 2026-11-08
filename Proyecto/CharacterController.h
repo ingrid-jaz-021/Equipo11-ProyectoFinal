@@ -38,7 +38,8 @@ public:
     void Attach(SkeletalAnimator* rig) { animator = rig; if (!rig) throw std::runtime_error("Personaje sin esqueleto."); rig->Reset(); }
     void SetFrozen(bool value) { frozen = value; }
     bool IsFrozen() const { return frozen; }
-    void Update(glm::vec2 input, glm::vec3 cameraForward, bool sprint, float dt, float worldScale)
+    void PreparePassenger(){Reset();SetFrozen(true);} // Pose Idle fija; sin reloj de animacion a bordo.
+    void Update(glm::vec2 input, glm::vec3 cameraForward, bool sprint, float dt, float worldScale,bool animate=true)
     {
         if (frozen) return;
         const bool moving = glm::dot(input, input) > 0.001f;
@@ -81,8 +82,9 @@ public:
         }
         const float weight = glm::clamp(actualSpeed / (worldScale * MovementSettings::WalkSpeed), 0.0f, 1.0f);
         gait = glm::mix(gait, weight, 1.0f - std::exp(-9.0f * dt));
-        if (animator) animator->Update(dt, phase, gait, running);
+        if(animate)AnimateFrame(dt);
     }
+    void AnimateFrame(float dt){if(animator&&!frozen)animator->Update(dt,phase,gait,running);}
     glm::vec3 Forward() const { return glm::vec3(std::sin(yaw), 0.0f, std::cos(yaw)); }
     void ConformToGround(const GroundSurface& ground,const glm::vec3& origin,float scale,float dt,float minStepHeight=0)
     {
@@ -140,12 +142,16 @@ public:
     void Reset() { pitch = 18.0f; orbit = 18.0f; distance = MovementSettings::FollowDistance; initialized = false; }
     void Update(const CharacterController& player, float dt, float scale, bool snap = false)
     {
-        const glm::vec3 desiredTarget = player.position + glm::vec3(0, player.height * 0.68f, 0);
-        const float angle = player.yaw + glm::radians(orbit);
+        UpdateAnchor(player.position,player.yaw,player.height,dt,scale,0,snap);
+    }
+    void UpdateAnchor(const glm::vec3& anchor,float yaw,float height,float dt,float scale,float minimumDistance,bool snap=false)
+    {
+        const glm::vec3 desiredTarget = anchor + glm::vec3(0, height * 0.68f, 0);
+        const float angle = yaw + glm::radians(orbit);
         const float elevation = glm::radians(pitch);
         const glm::vec3 offset(-std::sin(angle) * std::cos(elevation),
             std::sin(elevation), -std::cos(angle) * std::cos(elevation));
-        const glm::vec3 desiredPosition = desiredTarget + offset * distance * scale;
+        const glm::vec3 desiredPosition = desiredTarget + offset * std::max(distance,minimumDistance) * scale;
         const float blend = !initialized || snap ? 1.0f : 1.0f - std::exp(-9.0f * dt);
         target = glm::mix(target, desiredTarget, blend);
         position = glm::mix(position, desiredPosition, blend);

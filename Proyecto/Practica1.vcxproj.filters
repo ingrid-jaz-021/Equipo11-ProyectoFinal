@@ -49,6 +49,13 @@
     <ClInclude Include="CutoutImage.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="ZocaloBackdrop.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="WaterSurface.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="LakeFence.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="BoatNavigation.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="RenderState.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="Frustum.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="RenderMetrics.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="KioskNpc.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="DockSurface.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="MovementSettings.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="Camera.h">
       <Filter>Archivos de encabezado</Filter>
@@ -63,7 +70,22 @@
     <None Include="images\Casa2.png"><Filter>Archivos de recursos</Filter></None>
     <None Include="images\Casa3.png"><Filter>Archivos de recursos</Filter></None>
     <None Include="images\Iglesia.png"><Filter>Archivos de recursos</Filter></None>
+    <None Include="images\Cerca_lago.png"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\barquito.obj"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\barquito.mtl"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\KioskNpcRig\KioskNpcRig.fbx"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\KioskNpcRig\KioskNpcRig.blend"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\Persona Kiosko\PersonaZoc.obj"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\Pan de muerto\PanMuerto.obj"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\Pan de muerto\PanMuerto.mtl"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\Pan de muerto\Texturapan.jpg"><Filter>Archivos de recursos</Filter></None>
+    <None Include="images\MuelleMadera.png"><Filter>Archivos de recursos</Filter></None>
+    <None Include="tools\build_kiosk_npc.py"><Filter>Archivos de recursos</Filter></None>
+    <None Include="tools\build_dock_texture.py"><Filter>Archivos de recursos</Filter></None>
     <None Include="Shader\billboard.vs"><Filter>Archivos de origen\Shader</Filter></None>
+    <None Include="Shader\billboard_instanced.vs"><Filter>Archivos de origen\Shader</Filter></None>
+    <None Include="Shader\billboard_instanced.frag"><Filter>Archivos de origen\Shader</Filter></None>
+    <None Include="Shader\modelLoading_instanced.vs"><Filter>Archivos de origen\Shader</Filter></None>
     <None Include="Shader\billboard.frag"><Filter>Archivos de origen\Shader</Filter></None>
     <None Include="Shader\water.vs"><Filter>Archivos de origen\Shader</Filter></None>
     <None Include="Shader\water.frag"><Filter>Archivos de origen\Shader</Filter></None>

@@ -28,7 +28,10 @@
 #include "TreeVegetation.h"
 #include "ZocaloBackdrop.h"
 #include "WaterSurface.h"
+#include "LakeFence.h"
 #include "CompanionController.h"
+#include "BoatNavigation.h"
+#include "KioskNpc.h"
 
 namespace
 {
@@ -42,23 +45,32 @@ CompanionController companion;
 FollowCamera followCamera;
 enum class CameraMode { Free, ThirdPerson };
 CameraMode cameraMode = CameraMode::ThirdPerson;
+BoatNavigation* activeBoat=nullptr; // Propiedad de RunScene; callbacks solo durante su vida.
+bool vsyncEnabled=false;
 bool firstMouse = true;
 double lastX = 0.0, lastY = 0.0;
 
 void UpdateWindowTitle(GLFWwindow* window)
 {
     glfwSetWindowTitle(window, cameraMode == CameraMode::ThirdPerson
-        ? "Chignahuapan | Tercera persona | C: camara libre"
+        ? (activeBoat&&activeBoat->IsNavigating()?"Chignahuapan | Navegando | E: desembarcar | C: camara libre":"Chignahuapan | Caminando | E: embarcar | C: camara libre")
         : "Chignahuapan | Camara libre | C: tercera persona");
+}
+void UpdateFollowCamera(float dt,bool snap=false)
+{
+    if(activeBoat&&activeBoat->IsNavigating())
+        followCamera.UpdateAnchor(activeBoat->Position(),activeBoat->Yaw(),player.height,dt,ENVIRONMENT_SCALE,11.5f,snap);
+    else followCamera.Update(player,dt,ENVIRONMENT_SCALE,snap);
 }
 void ResetScene()
 {
+    if(activeBoat)activeBoat->Reset();
     cameraMode = CameraMode::ThirdPerson;
     player.SetFrozen(false);
     player.Reset();
     companion.ResetBeside(player,ENVIRONMENT_SCALE);
     followCamera.Reset();
-    followCamera.Update(player, 0.0f, ENVIRONMENT_SCALE, true);
+    UpdateFollowCamera(0,true);
     freeCamera = Camera(glm::vec3(30.0f, 30.0f, -60.0f), glm::vec3(0, 1, 0), 115.0f, -12.0f);
     firstMouse = true;
 }
@@ -97,16 +109,28 @@ void KeyCallback(GLFWwindow* window, int key, int, int action, int)
 {
     if (action != GLFW_PRESS) return;
     if (key == GLFW_KEY_ESCAPE) glfwSetWindowShouldClose(window, GLFW_TRUE);
+    if(key==GLFW_KEY_V){vsyncEnabled=!vsyncEnabled;glfwSwapInterval(vsyncEnabled?1:0);std::cout<<"V-Sync "<<(vsyncEnabled?"activado":"desactivado")<<" (V)."<<std::endl;}
     // F: pausa seguimiento del xolo; olfatea, gira y da un paso de carrera.
-    if(key==GLFW_KEY_F&&companion.TriggerSpecial())
+    if(key==GLFW_KEY_F&&(!activeBoat||!activeBoat->IsNavigating())&&companion.TriggerSpecial())
         std::cout<<"Xolo: olfatear -> giro -> paso de carrera; despues vuelve al lado de la nina."<<std::endl;
     if (key == GLFW_KEY_C)
     {
         cameraMode = cameraMode == CameraMode::ThirdPerson ? CameraMode::Free : CameraMode::ThirdPerson;
-        player.SetFrozen(cameraMode == CameraMode::Free);
-        followCamera.Update(player, 0.0f, ENVIRONMENT_SCALE, true);
+        player.SetFrozen(cameraMode == CameraMode::Free||(activeBoat&&activeBoat->IsNavigating()));
+        if(activeBoat&&cameraMode==CameraMode::Free)activeBoat->Anchor();
+        UpdateFollowCamera(0,true);
         firstMouse = true;
         UpdateWindowTitle(window);
+    }
+    // E en tercera persona: subir/bajar. En camara libre sigue siendo ascenso.
+    if(key==GLFW_KEY_E&&cameraMode==CameraMode::ThirdPerson&&activeBoat)
+    {
+        const auto action=activeBoat->Interact(player,companion);
+        if(action==BoatNavigation::Interaction::Boarded)std::cout<<"Navegando: W/S avanzar/retroceder, A/D timon, Shift acelerar, E desembarcar."<<std::endl;
+        else if(action==BoatNavigation::Interaction::Disembarked)std::cout<<"Caminando: nina y xolo en tierra firme; bote anclado."<<std::endl;
+        else if(action==BoatNavigation::Interaction::NoLanding)std::cout<<"Acercate al muelle o a una orilla para desembarcar."<<std::endl;
+        else std::cout<<"Acercate al bote para embarcar con E."<<std::endl;
+        UpdateFollowCamera(0,true);UpdateWindowTitle(window);
     }
     if (key == GLFW_KEY_TAB)
     {
@@ -118,10 +142,10 @@ void KeyCallback(GLFWwindow* window, int key, int, int action, int)
     if (key == GLFW_KEY_R)
     {
         if (cameraMode == CameraMode::Free) freeCamera = Camera(glm::vec3(30,30,-60), glm::vec3(0,1,0),115,-12);
-        else ResetScene();
+        else {ResetScene();UpdateWindowTitle(window);}
     }
 }
-void ApplyMovement(glm::vec2 input, bool sprint, float vertical, float dt)
+void ApplyMovement(glm::vec2 input, bool sprint, float vertical, float dt,bool animate=true)
 {
     if (cameraMode == CameraMode::Free)
     {
@@ -134,17 +158,39 @@ void ApplyMovement(glm::vec2 input, bool sprint, float vertical, float dt)
         if (vertical != 0) freeCamera.ProcessVertical(vertical, dt);
         return;
     }
-    player.Update(input, followCamera.Forward(), sprint, dt, ENVIRONMENT_SCALE);
+    if(activeBoat&&activeBoat->IsNavigating())activeBoat->Update(input,sprint,dt);
+    else player.Update(input, followCamera.Forward(), sprint, dt, ENVIRONMENT_SCALE,animate);
 }
-void DoMovement(GLFWwindow* window, float dt)
+void SimulateFrame(glm::vec2 input,bool sprint,float vertical,float dt,const GroundSurface* ground)
+{
+    const int steps=cameraMode==CameraMode::Free?1:std::max(1,static_cast<int>(std::ceil(dt*60)));
+    const float step=dt/steps;
+    for(int i=0;i<steps;++i)
+    {
+        const auto before=player.position,petBefore=companion.position;
+        ApplyMovement(input,sprint,vertical,step,false);
+        const bool sailing=activeBoat&&activeBoat->IsNavigating();
+        if(sailing)activeBoat->PlacePassengers(player,companion);
+        else
+        {
+            if(activeBoat&&cameraMode==CameraMode::ThirdPerson)activeBoat->GuardWalking(player,before);
+            if(ground&&cameraMode==CameraMode::ThirdPerson)player.ConformToGround(*ground,SOURCE_SPAWN,ENVIRONMENT_SCALE,step);
+            companion.UpdateCompanion(player,ground,SOURCE_SPAWN,ENVIRONMENT_SCALE,step,false);
+            if(activeBoat)activeBoat->GuardWalking(companion,petBefore);
+        }
+    }
+    // Evaluar cada esqueleto UNA vez por frame, no por cada subpaso fisico.
+    if(!activeBoat||!activeBoat->IsNavigating()){player.AnimateFrame(dt);companion.AnimateFrame(dt);}
+}
+void DoMovement(GLFWwindow* window, float dt,const GroundSurface* ground)
 {
     const auto down = [window](int key) {
         return glfwGetWindowAttrib(window, GLFW_FOCUSED) && glfwGetKey(window, key) == GLFW_PRESS;
     };
     const glm::vec2 input(static_cast<float>(down(GLFW_KEY_D) - down(GLFW_KEY_A)),
         static_cast<float>(down(GLFW_KEY_W) - down(GLFW_KEY_S)));
-    ApplyMovement(input, down(GLFW_KEY_LEFT_SHIFT),
-        static_cast<float>(down(GLFW_KEY_E) - down(GLFW_KEY_Q)), dt);
+    SimulateFrame(input, down(GLFW_KEY_LEFT_SHIFT),
+        static_cast<float>(down(GLFW_KEY_E) - down(GLFW_KEY_Q)), dt,ground);
 }
 void CheckOpenGL(const char* stage)
 {
@@ -229,9 +275,10 @@ public:
     {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap);
-        glBindVertexArray(VAO);
+        RenderState::BindVao(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
-        glBindVertexArray(0);
+        RenderMetrics::Draw(36);
+        RenderState::BindVao(0);
         glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
     }
 private:
@@ -261,6 +308,12 @@ void ValidateControls()
     const auto u=ProjectFloorUV({0,0,0},{0,1,0},tile);
     const auto v=ProjectFloorUV({tile.x,0,0},{0,1,0},tile);
     require(std::abs(v.x-u.x-1.0f)<0.00001f,"Escala UV de piso incorrecta.");
+    const auto frustum=ExtractFrustum(glm::mat4(1));
+    require(BoundsVisible(frustum,{-.5f,-.5f,-.5f},{.5f,.5f,.5f})&&
+        BoundsVisible(frustum,{.9f,-.5f,-.5f},{1.2f,.5f,.5f})&&
+        !BoundsVisible(frustum,{2,-.5f,-.5f},{3,.5f,.5f})&&
+        !TransformedBoundsVisible(frustum,glm::vec3(-.5f),glm::vec3(.5f),glm::translate(glm::mat4(1),glm::vec3(5,0,0))),
+        "El frustum descarta objetos visibles o conserva objetos fuera del campo.");
     std::cout<<"Controles OK: FPS, diagonales, bloqueo del personaje y escala UV."<<std::endl;
 }
 void ValidateFrozenCharacter(GLFWwindow* window)
@@ -513,10 +566,10 @@ void SaveFramebuffer(const std::string& path, int width, int height)
 void SetLighting(const Shader& shader)
 {
     shader.Use();
-    glUniform1i(glGetUniformLocation(shader.Program, "texture_diffuse1"), 0);
-    glUniform3f(glGetUniformLocation(shader.Program, "lightDirection"), -0.2f, -1.0f, -0.3f);
-    glUniform3f(glGetUniformLocation(shader.Program, "ambientLight"), 0.38f, 0.40f, 0.45f);
-    glUniform3f(glGetUniformLocation(shader.Program, "diffuseLight"), 0.26f, 0.25f, 0.24f);
+    glUniform1i(shader.Uniform("texture_diffuse1"), 0);
+    glUniform3f(shader.Uniform("lightDirection"), -0.2f, -1.0f, -0.3f);
+    glUniform3f(shader.Uniform("ambientLight"), 0.38f, 0.40f, 0.45f);
+    glUniform3f(shader.Uniform("diffuseLight"), 0.26f, 0.25f, 0.24f);
 }
 void SetValidationCamera(const glm::vec3& eye, const glm::vec3& target)
 {
@@ -528,28 +581,33 @@ void SetValidationCamera(const glm::vec3& eye, const glm::vec3& target)
 void DrawObject(const Model& object, const Shader& shader, const glm::mat4& model,
     const glm::mat4& view, const glm::mat4& projection, const CharacterController* actor=nullptr)
 {
+    if(actor)
+    {
+        const auto extent=glm::vec3(actor->height*2.5f);
+        if(!BoundsVisible(ExtractFrustum(projection*view),actor->position-extent,actor->position+extent))
+        {++RenderMetrics::culled;return;}
+    }
     shader.Use();
-    const glm::mat3 normal = glm::transpose(glm::inverse(glm::mat3(model)));
-    glUniformMatrix4fv(glGetUniformLocation(shader.Program, "model"), 1, GL_FALSE, glm::value_ptr(model));
-    glUniformMatrix3fv(glGetUniformLocation(shader.Program, "normalMatrix"), 1, GL_FALSE, glm::value_ptr(normal));
-    glUniformMatrix4fv(glGetUniformLocation(shader.Program, "view"), 1, GL_FALSE, glm::value_ptr(view));
-    glUniformMatrix4fv(glGetUniformLocation(shader.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    glUniformMatrix4fv(shader.Uniform("view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(shader.Uniform("projection"), 1, GL_FALSE, glm::value_ptr(projection));
     if (actor)
     {
         const auto& bones = actor->Pose();
-        glUniformMatrix4fv(glGetUniformLocation(shader.Program, "bones[0]"), static_cast<GLsizei>(bones.size()),
+        glUniformMatrix4fv(shader.Uniform("bones[0]"), static_cast<GLsizei>(bones.size()),
             GL_FALSE, glm::value_ptr(bones[0]));
     }
     object.Draw(shader, projection * view * model, actor==nullptr,model);
 }
-void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::string& capture)
+void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::string& capture,bool profiling=false)
 {
     if (validate) ValidateControls();
     Shader environmentShader("Shader/modelLoading.vs", "Shader/modelLoading.frag");
     Shader characterShader("Shader/character.vs", "Shader/modelLoading.frag");
+    Shader lampShader("Shader/modelLoading_instanced.vs","Shader/modelLoading.frag");
     Shader skyboxShader("Shader/SkyBox.vs", "Shader/SkyBox.frag");
     SetLighting(environmentShader);
     SetLighting(characterShader);
+    SetLighting(lampShader);
     const auto keepLoading = [window]() {
         glfwPollEvents();
         glClearColor(0.05f, 0.05f, 0.08f, 1.0f);
@@ -570,6 +628,23 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     companion.AttachCompanion(dog.Animator());
     companion.Configure(dog.GetMinBounds(),dog.GetMaxBounds(),MovementSettings::CompanionHeight*ENVIRONMENT_SCALE);
     companion.ResetBeside(player,ENVIRONMENT_SCALE);
+    Model npcModel("Models/KioskNpcRig/KioskNpcRig.fbx",keepLoading,{nullptr,true,{},false});
+    Model breadModel("Models/Pan de muerto/PanMuerto.obj",keepLoading);
+    Model boatModel("Models/barquito.obj",keepLoading);
+    if(validate&&characterOnly)
+    {
+        GroundSurface testGround;
+        const BoatNavigation::Area testArea={{4.976494f,.514682f,-230.460419f},{439.315247f,.514682f,139.177979f},
+            {4.976494f,.82025f,-62.891235f},{73.178017f,2.49138f,5.098602f}};
+        const auto a=testArea.dockMin,b=testArea.dockMax;
+        testGround.Add({a.x,b.y,a.z},{b.x,b.y,a.z},{b.x,b.y,b.z});
+        testGround.Add({a.x,b.y,a.z},{b.x,b.y,b.z},{a.x,b.y,b.z});
+        const float entryY=1.77513f;
+        testGround.Add({a.x-16,entryY,a.z},{a.x+.22f,entryY,a.z},{a.x+.22f,entryY,b.z});
+        testGround.Add({a.x-16,entryY,a.z},{a.x+.22f,entryY,b.z},{a.x-16,entryY,b.z});
+        BoatNavigation probe(testArea,testGround,SOURCE_SPAWN,ENVIRONMENT_SCALE,false);
+        probe.ValidateDockAccess(player,companion);probe.Validate(player,companion);ResetScene();
+    }
     GroundSurface ground;
     std::unique_ptr<Model> environment;
     if (!characterOnly)
@@ -579,17 +654,24 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             keepLoading, ModelOptions{ &ground, false, {"TapeteAserrin1.002","tarima_madera.001"} });
         if (validate) { environment->ValidateLayout(); ValidateSceneGrass(ground); ValidatePasilloGround(ground); }
     }
+    KioskNpc npc;npc.ConfigureNpc(npcModel,breadModel,environment.get(),SOURCE_SPAWN,ENVIRONMENT_SCALE);
+    if(validate)npc.Validate();
     Model lamp("Models/Farola/Farola.obj", keepLoading,{nullptr,false,{"Material.001"}});
     ZocaloLighting plazaLights;
     plazaLights.Build(lamp, environment.get(), ground, SOURCE_SPAWN, ENVIRONMENT_SCALE);
     if(validate)plazaLights.Validate(lamp,ENVIRONMENT_SCALE);
     plazaLights.Upload(environmentShader);
     plazaLights.Upload(characterShader);
+    plazaLights.Upload(lampShader);
+    std::vector<glm::mat4> lampModels;lampModels.reserve(plazaLights.instances.size());
+    for(const auto& lamp:plazaLights.instances)lampModels.push_back(lamp.model);
     std::cout << "Zocalo: 12 farolas (8 interiores y 4 exteriores), focos alineados con su cristal." << std::endl;
     std::unique_ptr<AlphaBillboards> billboards;
     std::unique_ptr<TreeVegetation> vegetation;
     std::unique_ptr<ZocaloBackdrop> backdrop;
     std::unique_ptr<WaterSurface> water;
+    std::unique_ptr<LakeFence> lakeFence;
+    std::unique_ptr<BoatNavigation> navigation;
     if (environment)
     {
         billboards=std::make_unique<AlphaBillboards>();
@@ -597,6 +679,11 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         backdrop=std::make_unique<ZocaloBackdrop>(*billboards,*environment,ground,SOURCE_SPAWN,ENVIRONMENT_SCALE);
         if(validate) billboards->ValidateAlpha();
         water=std::make_unique<WaterSurface>(*environment,SOURCE_SPAWN,ENVIRONMENT_SCALE);
+        lakeFence=std::make_unique<LakeFence>(*billboards,*water,SOURCE_SPAWN,ENVIRONMENT_SCALE);
+        navigation=std::make_unique<BoatNavigation>(BoatNavigation::Area{water->SourceMin(),water->SourceMax(),water->DockMin(),water->DockMax()},
+            ground,SOURCE_SPAWN,ENVIRONMENT_SCALE);
+        activeBoat=navigation.get();
+        if(validate){navigation->ValidateDockAccess(player,companion);navigation->Validate(player,companion);ResetScene();}
         if(validate)water->ValidateAnimation();
     }
     Skybox skybox;
@@ -604,9 +691,9 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     firstMouse = true;
     if (!validate) glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     skyboxShader.Use();
-    glUniform1i(glGetUniformLocation(skyboxShader.Program, "skybox"), 0);
-    const GLint skyView = glGetUniformLocation(skyboxShader.Program, "view");
-    const GLint skyProjection = glGetUniformLocation(skyboxShader.Program, "projection");
+    glUniform1i(skyboxShader.Uniform("skybox"), 0);
+    const GLint skyView = skyboxShader.Uniform("view");
+    const GLint skyProjection = skyboxShader.Uniform("projection");
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
     glDisable(GL_CULL_FACE);
@@ -618,31 +705,79 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         << "/" << MovementSettings::RunSpeed << "; camara: " << MovementSettings::FlySpeed << "/" << MovementSettings::FlyFastSpeed << std::endl;
     std::cout << "WASD: personaje | Shift: correr | C: cambiar camara | R: reiniciar\n"
         << "Camara libre: WASD + E/Q (personaje congelado) | Raton: mirar | Rueda: zoom\n"
-        << "Tab: cursor | Esc: salir" << std::endl;
+        << "Tab: cursor | V: alternar V-Sync (inicia desactivado) | Esc: salir" << std::endl;
     std::cout<<"F: xolo olfatea, gira y avanza; despues retoma el seguimiento."<<std::endl;
+    std::cout<<"E: embarcar/desembarcar cerca del bote, muelle u orilla. Navegando: W/S motor, A/D timon; ambos pasajeros inmoviles."<<std::endl;
 
     double previous = glfwGetTime();
+    FrameProfiler profiler(profiling);
     int frame = 0;
+    glm::vec3 pausedBoat(0);std::vector<glm::mat4> pausedHuman,pausedDog;
     while (!glfwWindowShouldClose(window))
     {
         const double now = glfwGetTime();
-        const float dt = validate ? 1.0f / 60.0f : std::min(static_cast<float>(now - previous), 0.1f);
+        const float dt = validate ? 1.0f / 60.0f : glm::clamp(static_cast<float>(now-previous),0.0f,.25f);
         previous = now;
+        profiler.BeginFrame(frame);
+        RenderState::Invalidate();
         glfwPollEvents();
         if (validate)
         {
-            const glm::vec2 input = frame > 0 && frame < 70 ? glm::vec2(0, 1) : glm::vec2(0);
+            glm::vec2 input = frame > 0 && frame < 70 ? glm::vec2(0, 1) : glm::vec2(0);
             if (frame == 90) KeyCallback(window, GLFW_KEY_C, 0, GLFW_PRESS, 0);
             if (frame == 110) KeyCallback(window, GLFW_KEY_C, 0, GLFW_PRESS, 0);
-            ApplyMovement(input, frame >= 35 && frame < 65, 0, dt);
+            if(environment&&frame==610)
+            {
+                ResetScene();player.position=navigation->DockSpot();companion.ResetBeside(player,ENVIRONMENT_SCALE);
+                KeyCallback(window,GLFW_KEY_E,0,GLFW_PRESS,0);KeyCallback(window,GLFW_KEY_F,0,GLFW_PRESS,0);
+                if(!navigation->IsNavigating()||companion.IsSpecial())throw std::runtime_error("E/F no respetan el estado de navegacion.");
+                const auto target=navigation->Position()+glm::vec3(0,15,0);
+                SetValidationCamera(target+glm::vec3(60,48,-75),target);
+            }
+            if(environment&&frame==620)KeyCallback(window,GLFW_KEY_C,0,GLFW_PRESS,0);
+            if(environment&&frame>=620&&frame<680)input={frame>=650&&frame<670?.65f:0.0f,1.0f};
+            if(environment&&frame==680)
+            {
+                KeyCallback(window,GLFW_KEY_C,0,GLFW_PRESS,0);
+                pausedBoat=navigation->Position();pausedHuman=player.Pose();pausedDog=companion.Pose();
+            }
+            if(environment&&frame>=680&&frame<690)input={1,1}; // Solo se mueve la fly cam.
+            if(environment&&frame==690)
+            {
+                if(navigation->Position()!=pausedBoat||std::memcmp(pausedHuman.data(),player.Pose().data(),pausedHuman.size()*sizeof(glm::mat4))||
+                    std::memcmp(pausedDog.data(),companion.Pose().data(),pausedDog.size()*sizeof(glm::mat4)))
+                    throw std::runtime_error("C no congela bote y pasajeros.");
+                SetValidationCamera(pausedBoat+glm::vec3(65,50,55),pausedBoat+glm::vec3(0,15,0));
+            }
+            if(environment&&frame==700)KeyCallback(window,GLFW_KEY_C,0,GLFW_PRESS,0);
+            if(environment&&frame>=700&&frame<710)input={0,-1};
+            if(environment&&frame==710)
+            {
+                KeyCallback(window,GLFW_KEY_E,0,GLFW_PRESS,0);
+                if(!navigation->IsNavigating())throw std::runtime_error("E desembarca en agua profunda.");
+            }
+            if(environment&&frame==720)
+                SetValidationCamera(navigation->Position()+glm::vec3(60,40,-45),navigation->Position()+glm::vec3(0,13,0));
+            if(environment&&frame==740)
+            {
+                ResetScene();player.position=navigation->DockSpot();companion.ResetBeside(player,ENVIRONMENT_SCALE);
+                KeyCallback(window,GLFW_KEY_E,0,GLFW_PRESS,0);
+            }
+            if(environment&&frame==741)
+            {
+                KeyCallback(window,GLFW_KEY_E,0,GLFW_PRESS,0);
+                if(navigation->IsNavigating()||player.IsFrozen()||companion.IsFrozen())throw std::runtime_error("E no devuelve el control en el muelle.");
+            }
+            if(environment&&frame==750)
+            {
+                const auto target=(navigation->Position()+player.position)*.5f+glm::vec3(0,12,0);
+                SetValidationCamera(target+glm::vec3(40,55,-95),target);
+            }
+            SimulateFrame(input,frame>=35&&frame<65,0,dt,environment?&ground:nullptr);
         }
-        else DoMovement(window, dt);
-        if (environment && cameraMode == CameraMode::ThirdPerson)
-        {
-            player.ConformToGround(ground, SOURCE_SPAWN, ENVIRONMENT_SCALE, dt);
-        }
-        companion.UpdateCompanion(player,environment?&ground:nullptr,SOURCE_SPAWN,ENVIRONMENT_SCALE,dt);
-        followCamera.Update(player, dt, ENVIRONMENT_SCALE);
+        else DoMovement(window,dt,environment?&ground:nullptr);
+        UpdateFollowCamera(dt);
+        npc.UpdateNpc(dt);
         if (validate && environment)
         {
             if (frame == 130)
@@ -690,6 +825,15 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
                 SetValidationCamera(water->Center()+glm::vec3(-850,220,450),water->Center()+glm::vec3(0,40,0));
             if(frame==330)
                 SetValidationCamera(water->DockCenter()+glm::vec3(-500,350,650),water->DockCenter()+glm::vec3(150,0,0));
+            if(frame==305||frame==315)
+                SetValidationCamera(lakeFence->EntryEye(frame==315),lakeFence->EntryTarget());
+            if(frame==325)SetValidationCamera(lakeFence->RailEye(),lakeFence->RailTarget());
+            if(frame==335)
+            {
+                glm::vec3 lo,hi;environment->GetMaterialBounds("Material.004",lo,hi);
+                const glm::vec3 center=((lo+hi)*.5f-SOURCE_SPAWN)*ENVIRONMENT_SCALE;
+                SetValidationCamera(center+glm::vec3(150,65,-190),center+glm::vec3(0,10,0));
+            }
             if(frame==310||frame==320)
             {
                 player.SetFrozen(false);player.Reset();
@@ -735,11 +879,18 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
                 SetValidationCamera(player.position+glm::vec3(player.height*2.0f,player.height*0.60f,0),
                     player.position+glm::vec3(0,player.height*0.55f,0));
             }
+            const int npcStart=environment?780:400;
+            if(frame==npcStart||frame==npcStart+5||frame==npcStart+10||frame==npcStart+15||frame==npcStart+17)
+            {
+                const double sample=frame==npcStart?1.0:frame==npcStart+5?4.4:frame==npcStart+10?7.7:frame==npcStart+15?9.9:11.2;
+                npc.ResetCycle();npc.UpdateNpc(sample);SetValidationCamera(npc.ViewEye(),npc.ViewTarget());
+            }
         }
         int width, height;
         glfwGetFramebufferSize(window, &width, &height);
         if (width <= 0 || height <= 0) { glfwWaitEventsTimeout(0.05); continue; }
         glViewport(0, 0, width, height);
+        profiler.BeginRender();
         glClearColor(0.05f, 0.05f, 0.08f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         const glm::vec3 eye = cameraMode == CameraMode::Free ? freeCamera.GetPosition() : followCamera.position;
@@ -752,9 +903,13 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             glm::mat4 model = glm::translate(glm::mat4(1), ENVIRONMENT_TRANSLATION);
             model = glm::scale(model, glm::vec3(ENVIRONMENT_SCALE));
             DrawObject(*environment, environmentShader, model, view, projection);
-            for (const auto& instance : plazaLights.instances)
-                DrawObject(lamp, environmentShader, instance.model, view, projection);
+            lamp.DrawInstances(lampShader,lampModels,projection*view);
+            navigation->DrawShore(environmentShader,view,projection);
+            DrawObject(boatModel,environmentShader,navigation->ModelMatrix(),view,projection);
+            navigation->DrawMarker(environmentShader,view,projection,now);
         }
+        DrawObject(npcModel,characterShader,npc.WorldMatrix(),view,projection,&npc);
+        if(npc.BreadVisible())DrawObject(breadModel,environmentShader,npc.BreadMatrix(),view,projection);
         DrawObject(girl, characterShader, player.ModelMatrix(), view, projection, &player);
         DrawObject(dog,characterShader,companion.ModelMatrix(),view,projection,&companion);
         if(water)water->Draw(view,projection,eye,now);
@@ -769,9 +924,13 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         glDepthFunc(GL_LESS);
         // Cielo y opacos primero; planos RGBA al final, ordenados de lejos a cerca.
         if(billboards) billboards->Draw(view,projection);
+        profiler.EndRender();
         const int actionFrame=environment?340:140;
         const bool captureAction=frame==actionFrame||frame==actionFrame+55||frame==actionFrame+96||frame==actionFrame+132||frame==actionFrame+180||frame==actionFrame+255;
-        if (validate && (captureAction || frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 310 || frame == 320 || frame == 330))
+        const bool captureBoat=environment&&(frame==610||frame==640||frame==670||frame==690||frame==720||frame==750);
+        const int npcStart=environment?780:400;
+        const bool captureNpc=frame==npcStart||frame==npcStart+5||frame==npcStart+10||frame==npcStart+15||frame==npcStart+17;
+        if (validate && (captureNpc || captureBoat || captureAction || frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 305 || frame == 310 || frame == 315 || frame == 320 || frame == 325 || frame == 330 || frame == 335))
         {
             std::vector<float> depth(static_cast<size_t>(width) * height);
             glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, depth.data());
@@ -781,7 +940,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         }
         if (frame == 0 || validate) CheckOpenGL("personaje, animacion, camaras y skybox");
         glfwSwapBuffers(window);
-        if (validate && ++frame >= (environment ? 620 : 420))
+        if (validate && ++frame >= (environment ? 800 : 420))
         {
             if(companion.IsSpecial()||glm::length(companion.position-companion.FollowTarget(player,ENVIRONMENT_SCALE))>.4f*ENVIRONMENT_SCALE)
                 throw std::runtime_error("F no devolvio el xolo a su posicion de seguimiento.");
@@ -791,13 +950,16 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         }
         if (!validate) ++frame;
     }
+    profiler.Write((capture.empty()?"obj/validation/profile":capture)+"-performance.json");
+    activeBoat=nullptr;
 }
 }
 
 int main(int argc, char** argv)
 {
     const bool characterOnly = argc > 1 && std::string(argv[1]) == "--validate-character";
-    const bool validate = characterOnly || (argc > 1 && std::string(argv[1]) == "--validate");
+    const bool profiling=argc>1&&std::string(argv[1])=="--profile";
+    const bool validate = profiling||characterOnly || (argc > 1 && std::string(argv[1]) == "--validate");
     const std::string capture = validate && argc > 2 ? argv[2] : "";
     try
     {
@@ -813,7 +975,7 @@ int main(int argc, char** argv)
     GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "Chignahuapan", nullptr, nullptr);
     if (!window) { glfwTerminate(); return EXIT_FAILURE; }
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(validate ? 0 : 1);
+    glfwSwapInterval(0); // Sin esperas escalonadas 60->30 FPS cuando un frame supera el refresco.
     glewExperimental = GL_TRUE;
     if (glewInit() != GLEW_OK)
     {
@@ -827,7 +989,7 @@ int main(int argc, char** argv)
         else followCamera.Scroll(static_cast<float>(y));
     });
     int result = EXIT_SUCCESS;
-    try { RunScene(window, validate, characterOnly, capture); }
+    try { RunScene(window, validate, characterOnly, capture,profiling); }
     catch (const std::exception& error)
     {
         std::cerr << "ERROR: " << error.what() << std::endl;

@@ -2,16 +2,16 @@
   "Idle": {
     "frames": 121,
     "arm_torso_triangle_intersections": 0,
-    "attachment_seam_excluded": "arm weights .05.. .95"
+    "attachment_seam_excluded": "original short sleeves/socket radius .08; arm weights .05.. .95"
   },
   "Walk": {
     "frames": 65,
     "arm_torso_triangle_intersections": 0,
-    "attachment_seam_excluded": "arm weights .05.. .95"
+    "attachment_seam_excluded": "original short sleeves/socket radius .08; arm weights .05.. .95"
   },
   "Run": {
     "frames": 44,
     "arm_torso_triangle_intersections": 0,
-    "attachment_seam_excluded": "arm weights .05.. .95"
+    "attachment_seam_excluded": "original short sleeves/socket radius .08; arm weights .05.. .95"
   }
 }

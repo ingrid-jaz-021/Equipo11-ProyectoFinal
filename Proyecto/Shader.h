@@ -4,7 +4,9 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <GL/glew.h>
+#include "RenderState.h"
 
 class Shader
 {
@@ -39,9 +41,15 @@ public:
     ~Shader() { if (Program) glDeleteProgram(Program); }
     Shader(const Shader&) = delete;
     Shader& operator=(const Shader&) = delete;
-    void Use() const { glUseProgram(Program); }
-    GLint getColorLocation() const { return glGetUniformLocation(Program, "color"); }
+    void Use() const { RenderState::UseProgram(Program); }
+    GLint Uniform(const std::string& name) const
+    {
+        const auto it=uniforms.find(name);if(it!=uniforms.end())return it->second;
+        const GLint location=glGetUniformLocation(Program,name.c_str());uniforms.emplace(name,location);return location;
+    }
+    GLint getColorLocation() const { return Uniform("color"); }
 private:
+    mutable std::unordered_map<std::string,GLint> uniforms;
     static std::string ReadFile(const char* path)
     {
         std::ifstream file(path);

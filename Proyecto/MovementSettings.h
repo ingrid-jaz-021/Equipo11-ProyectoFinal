@@ -9,6 +9,7 @@ namespace MovementSettings
     constexpr float FollowDistance = 8.0f; // Encuadrar a la nina y al acompanante.
     constexpr float LampHeight = 12.0f;
     constexpr float KioskScale = 1.6f;
+    constexpr float FountainScale = .80f; // Independiente del kiosko: antes compartia x1.6.
     constexpr float BenchScale = .45f;
     constexpr float WalkStrideHeightRatio = .65f;
     constexpr float RunStrideHeightRatio = 1.15f;
