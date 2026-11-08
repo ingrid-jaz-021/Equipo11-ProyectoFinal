@@ -13,6 +13,38 @@ def smooth(t):
     t=max(0.0,min(1.0,t))
     return t*t*t*(t*(t*6-15)+10)
 def mix(a,b,t): return a+(b-a)*t
+def reshape_shoulders(meshes):
+    """Rebuild arm proportions in the source T pose, before skinning/export.
+
+    The old skin cylinders started INSIDE the chest, yet had 100% upper-arm
+    weights. Moving a shoulder therefore swung that hidden stub through the
+    shirt. Give the shoulder its own socket and blend that root to the chest.
+    """
+    source=(.12,.17,.37,.54,.60)
+    target=(.205,.245,.405,.54,.585)
+    def longitudinal(x):
+        if x<source[0]:return target[0]+(x-source[0])
+        for i in range(len(source)-1):
+            if x<=source[i+1]:return mix(target[i],target[i+1],(x-source[i])/(source[i+1]-source[i]))
+        return target[-1]+(x-source[-1])*.75
+    changed={}
+    for obj in meshes:
+        if obj.name not in {'Hand_L.002','Hand_L.003'}:continue
+        count=0
+        for v in obj.data.vertices:
+            x,y,z=v.co.x,v.co.z,-v.co.y;a=abs(x);sign=1 if x>=0 else -1
+            if obj.name=='Hand_L.003':
+                radius=mix(.78,.70,smooth((a-.40)/.13))
+                v.co=eng((sign*longitudinal(a),.685+(y-.685)*radius,.025+(z-.025)*radius));count+=1
+            elif y>.58 and a>.12:
+                # Extend only the sleeve/shoulder, keeping the shirt's waist.
+                blend=smooth((y-.58)/.045)*smooth((a-.12)/.04)
+                radius=1-.18*blend*smooth((a-.17)/.045)
+                v.co=eng((sign*mix(a,longitudinal(a),blend),.685+(y-.685)*radius,.025+(z-.025)*radius));count+=1
+        obj.data.update();changed[obj.name]=count
+    return {'modified_vertices':changed,'t_pose_joint_x':{'shoulder':.245,'elbow':.405,'wrist':.54,'palm_tip':.585},
+        'upper_arm_length':.16,'forearm_length':.135,'arm_radial_scale':[.78,.70],
+        'root_weights':'Chest -> UpperArm, smooth transition x=.20.. .275; shared with sleeve'}
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.context.preferences.filepaths.save_version=0
@@ -24,7 +56,9 @@ def main():
         obj.select_set(True)
         bpy.ops.object.transform_apply(location=True,rotation=True,scale=True)
         obj.select_set(False)
-        if obj.name in {"Hand_L.003","Hand_L.004"}:
+    geometry=reshape_shoulders(meshes)
+    for obj in meshes:
+        if obj.name in {"Hand_L.002","Hand_L.003","Hand_L.004"}:
             bm=bmesh.new();bm.from_mesh(obj.data)
             bmesh.ops.subdivide_edges(bm,edges=list(bm.edges),cuts=2,use_grid_fill=True)
             bmesh.ops.recalc_face_normals(bm,faces=list(bm.faces))
@@ -69,10 +103,10 @@ def main():
     bone("Neck",(0,0.74,0.015),(0,0.82,0.015),"Chest",True)
     bone("Head",(0,0.82,0.015),(0,1.20,0.015),"Neck",True)
     for side,sign in [("L",1),("R",-1)]:
-        bone("Clavicle."+side,(sign*0.045,0.685,0.025),(sign*0.17,0.685,0.025),"Chest")
-        bone("UpperArm."+side,(sign*0.17,0.685,0.025),(sign*0.37,0.685,0.025),"Clavicle."+side,True)
-        bone("Forearm."+side,(sign*0.37,0.685,0.025),(sign*0.54,0.685,0.025),"UpperArm."+side,True)
-        bone("Hand."+side,(sign*0.54,0.685,0.025),(sign*0.60,0.685,0.025),"Forearm."+side,True)
+        bone("Clavicle."+side,(sign*0.045,0.685,0.025),(sign*0.245,0.685,0.025),"Chest")
+        bone("UpperArm."+side,(sign*0.245,0.685,0.025),(sign*0.405,0.685,0.025),"Clavicle."+side,True)
+        bone("Forearm."+side,(sign*0.405,0.685,0.025),(sign*0.54,0.685,0.025),"UpperArm."+side,True)
+        bone("Hand."+side,(sign*0.54,0.685,0.025),(sign*0.585,0.685,0.025),"Forearm."+side,True)
         bone("Thigh."+side,(sign*0.095,0.43,0.015),(sign*0.105,0.255,0.015),"Hips")
         bone("Shin."+side,(sign*0.105,0.255,0.015),(sign*0.105,0.105,0.025),"Thigh."+side,True)
         bone("Foot."+side,(sign*0.105,0.105,0.025),(sign*0.105,0.045,0.145),"Shin."+side,True)
@@ -80,13 +114,7 @@ def main():
     bpy.ops.object.mode_set(mode='OBJECT')
     for obj in meshes:
         for b in arm.bones: obj.vertex_groups.new(name=b.name)
-        for v in obj.data.vertices:
-            x,y,z=v.co.x,v.co.z,-v.co.y
-            s="L" if x>=0 else "R"
-            m=obj.data.materials[obj.data.polygons[0].material_index].name if obj.data.polygons else ""
-            # Per-vertex material is necessary on the joined shorts/legs and sleeves.
-            mats=set()
-            # Assigned below from polygon membership.
+        # Per-vertex material is necessary on the joined shorts/legs and sleeves.
         vertex_material={}
         for poly in obj.data.polygons:
             material=obj.data.materials[poly.material_index].name if poly.material_index<len(obj.data.materials) else ""
@@ -95,10 +123,12 @@ def main():
             x,y,z=v.co.x,v.co.z,-v.co.y
             s="L" if x>=0 else "R";m=vertex_material.get(v.index,"")
             weights={}
-            if m=="skin.002" or (m=="Tshirt" and y>0.62 and abs(x)>0.14):
-                armw=1.0 if m=="skin.002" else smooth((abs(x)-0.14)/0.08)
-                elbow=smooth((abs(x)-0.33)/0.08)
-                wrist=smooth((abs(x)-0.51)/0.06)
+            if m=="skin.002" or (m=="Tshirt" and y>0.60 and abs(x)>0.20):
+                # Skin root and sleeve MUST share the same gradual attachment.
+                # No rigid inward stub rotating through the shoulder socket.
+                armw=smooth((abs(x)-0.20)/0.075)
+                elbow=smooth((abs(x)-0.375)/0.06)
+                wrist=smooth((abs(x)-0.515)/0.05)
                 weights={"Chest":1-armw,"UpperArm."+s:armw*(1-elbow),
                     "Forearm."+s:armw*elbow*(1-wrist),"Hand."+s:armw*elbow*wrist}
             elif y<0.47 and m!="Tshirt":
@@ -173,7 +203,7 @@ def main():
                 ranges[name][joint+side]={"min":min(angles),"max":max(angles)}
     (OUT/"rig-manifest.json").write_text(json.dumps({"bones":list(arm.bones.keys()),
         "clips":clips,"meshes":len(meshes),"rest_pose":"relaxed arms, baked in bind pose",
-        "joint_ranges_degrees":ranges,"deformation_support_loops":2,"foot_contact_baked":True,"motion_source":"CMU captured motion; see mocap-retarget.json"},indent=2),encoding="utf8")
+        "joint_ranges_degrees":ranges,"shoulder_geometry":geometry,"deformation_support_loops":2,"foot_contact_baked":True,"motion_source":"CMU captured motion; see mocap-retarget.json"},indent=2),encoding="utf8")
     (OUT/"rig-status.txt").write_text("OK CMU mocap",encoding="utf8")
     if (OUT/"rig-error.txt").exists():(OUT/"rig-error.txt").unlink()
 try: main()

@@ -75,7 +75,9 @@ public:
             yaw += delta * (1.0f - std::exp(-12.0f * dt));
             // Proporcion respecto a la altura: FBX puede usar centimetros.
             const float cycleDistance = height * glm::mix(MovementSettings::WalkStrideHeightRatio,MovementSettings::RunStrideHeightRatio,running);
-            phase = std::fmod(phase + glm::length(displacement) * 6.28318530718f / cycleDistance, 6.28318530718f);
+            const float advance=glm::length(displacement)*6.28318530718f/cycleDistance;
+            const float cadence=glm::mix(1.7f,2.8f,running);
+            phase=std::fmod(phase+std::min(advance,dt*6.28318530718f*cadence),6.28318530718f);
         }
         const float weight = glm::clamp(actualSpeed / (worldScale * MovementSettings::WalkSpeed), 0.0f, 1.0f);
         gait = glm::mix(gait, weight, 1.0f - std::exp(-9.0f * dt));

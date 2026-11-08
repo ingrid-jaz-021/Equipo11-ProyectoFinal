@@ -30,7 +30,7 @@ class SkeletalAnimator
     std::vector<glm::mat4> restGlobalPose;
     struct ArmLimit {int upper,forearm,hand,chest,sign;glm::vec3 up,side,forward,elbowOffset,wristOffset,palm;};
     std::vector<ArmLimit> armLimits;
-    struct {float back=-30,front=45,inward=-4,outward=28,minFlex=6,maxFlex=100,clearance=.55f,handUp=.15f;} armSettings;
+    struct {float back=-30,front=45,inward=12,outward=28,minFlex=6,maxFlex=100,clearance=.55f,handUp=.15f;} armSettings;
     std::unordered_map<std::string,std::pair<unsigned,float>> influenceStats;
     glm::mat4 inverseRoot = glm::mat4(1);
     int idle = -1, walk = -1, run = -1;

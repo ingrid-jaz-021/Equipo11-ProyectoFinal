@@ -1,14 +1,14 @@
 {
   "Idle": {
-    "max_forearm_hand_vertex_above_shoulder": -0.1928451393614523,
+    "max_forearm_hand_vertex_above_shoulder": -0.15004840167239308,
     "frames": 121
   },
   "Walk": {
-    "max_forearm_hand_vertex_above_shoulder": -0.13475752261001617,
+    "max_forearm_hand_vertex_above_shoulder": -0.1104384804784786,
     "frames": 65
   },
   "Run": {
-    "max_forearm_hand_vertex_above_shoulder": -0.06530001381179318,
+    "max_forearm_hand_vertex_above_shoulder": -0.05701802689873148,
     "frames": 44
   }
 }

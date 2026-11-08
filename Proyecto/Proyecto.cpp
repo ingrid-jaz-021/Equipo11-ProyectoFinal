@@ -540,7 +540,7 @@ void DrawObject(const Model& object, const Shader& shader, const glm::mat4& mode
         glUniformMatrix4fv(glGetUniformLocation(shader.Program, "bones[0]"), static_cast<GLsizei>(bones.size()),
             GL_FALSE, glm::value_ptr(bones[0]));
     }
-    object.Draw(shader, projection * view * model, actor==nullptr);
+    object.Draw(shader, projection * view * model, actor==nullptr,model);
 }
 void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::string& capture)
 {
@@ -577,15 +577,15 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         glfwSetWindowTitle(window, "Cargando EntornoCompleto.obj...");
         environment = std::make_unique<Model>("Models/EntornoCompleto/EntornoCompleto.obj",
             keepLoading, ModelOptions{ &ground, false, {"TapeteAserrin1.002","tarima_madera.001"} });
-        if (validate) { ValidateSceneGrass(ground); ValidatePasilloGround(ground); }
+        if (validate) { environment->ValidateLayout(); ValidateSceneGrass(ground); ValidatePasilloGround(ground); }
     }
-    Model lamp("Models/Farola/Farola.obj", keepLoading);
+    Model lamp("Models/Farola/Farola.obj", keepLoading,{nullptr,false,{"Material.001"}});
     ZocaloLighting plazaLights;
     plazaLights.Build(lamp, environment.get(), ground, SOURCE_SPAWN, ENVIRONMENT_SCALE);
     if(validate)plazaLights.Validate(lamp,ENVIRONMENT_SCALE);
     plazaLights.Upload(environmentShader);
     plazaLights.Upload(characterShader);
-    std::cout << "Zocalo: 8 farolas, 8 focos alineados con su cristal." << std::endl;
+    std::cout << "Zocalo: 12 farolas (8 interiores y 4 exteriores), focos alineados con su cristal." << std::endl;
     std::unique_ptr<AlphaBillboards> billboards;
     std::unique_ptr<TreeVegetation> vegetation;
     std::unique_ptr<ZocaloBackdrop> backdrop;

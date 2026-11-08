@@ -48,8 +48,18 @@ skinning a cuatro influencias y admite hasta 48 huesos. La conversion FBX de
 unidades no cambia la cadencia, que se calcula respecto a la altura del personaje.
 La geometria original y el archivo Blender original se conservan.
 
+El modelo activo tiene geometria de hombros reconstruida: sockets mas exteriores,
+humero de 0.16 y antebrazo de 0.135 unidades del modelo, brazos un 22% mas delgados
+y manos un 30% mas delgadas. Las mangas se prolongan hasta los nuevos sockets;
+sus pesos y los de la raiz del brazo se mezclan gradualmente con Chest. Esto evita
+que el extremo interior del cilindro del brazo rote rigidamente dentro del torso.
+Se exportan estas modificaciones reales a FBX, GLB y BLEND.
+`shoulder-clearance-audit.json` comprueba por interseccion de triangulos las
+superficies deformadas de brazos y torso en 230 fotogramas de los tres clips;
+excluye solamente la costura de pesos compartidos del hombro.
+
 `arm-limits.txt` es el perfil compartido por Blender y C++: balanceo del humero
-entre -30 y 45 grados, abduccion -4 a 28 y codo entre 6 y 100 grados. El retarget
+entre -30 y 45 grados, abduccion 12 a 28 y codo entre 6 y 100 grados. El retarget
 comprime suavemente los gestos mas cerrados del adulto para conservar su variacion
 sin pegar todo el ciclo al limite. Se mantienen munecas y palmas por debajo del
 hombro con margen para el volumen real de las manos. La proteccion de
@@ -67,7 +77,11 @@ la carpeta de la solucion:
 El script crea el rig y pesos, y llama a `tools/mocap_retarget.py` para retargetear
 los BVH incluidos en `Models/NinaRig/mocap`. Se hornean a 60 FPS, sin desplazamiento
 horizontal de raiz, y se corrigen las uniones de los ciclos. El controlador ajusta
-la cadencia a la distancia recorrida y mezcla los clips con quaternions.
+la cadencia a la distancia recorrida y mezcla los clips con quaternions, con un
+limite de 1.7 ciclos/s andando y 2.8 corriendo para evitar acelerar excesivamente
+las articulaciones al navegar mas rapido. WalkSpeed=5.2 y RunSpeed=11.5 unidades
+fuente/s (antes 2.6 y 6.5); la integracion usa deltaTime y mantiene la misma
+distancia a 30/60/144 FPS. El xolo acelera tambien para conservar el seguimiento.
 `mocap-retarget.json` guarda los recortes y fases de las capturas. La atribucion y
 los terminos originales se conservan en `mocap/ATTRIBUTION.md` y `READMEFIRST.txt`.
 Fuente: https://mocap.cs.cmu.edu/ ; conversion BVH:
@@ -199,13 +213,26 @@ El escenario unificado `Models/EntornoCompleto/EntornoCompleto.obj` se carga una
 Assimp importa en segundo plano; los recursos OpenGL se crean en el hilo principal.
 Se omiten mallas fuera de vista y no se conservan copias de su geometria en RAM.
 
-Las ocho farolas y sus luces se conservan: cuatro esquinas y cuatro alrededor
-del quiosco. Miden **8 unidades fuente** (antes 5), controladas por LampHeight en
+El cargador separa las ocho bancas fusionadas de LoD_0SG por su ubicacion. Cada
+banca usa una matriz local con escala **0.45**, anclada al pie y al nivel del piso;
+no se reduce el anillo completo de posiciones alrededor de la plaza. El kiosko
+Material.014 y su conjunto central (.004/.005/.007) usan escala **1.6** alrededor
+del centro a nivel del suelo. Las cotas y los triangulos usados para detectar
+altura reciben las mismas transformaciones que el render.
+
+Hay **12 farolas**: las ocho interiores (cuatro esquinas y cuatro alrededor del
+quiosco) mas cuatro nuevas en las esquinas exteriores, inmediatamente despues
+de las franjas amarillas .016 a .019 y dentro de la calle oscura .020. Se mide el
+radio de la base real para que quede entera fuera de la linea, con 0.15 unidades
+de margen. Las cuatro del anillo se separan segun el kiosko ya ampliado.
+Miden **12 unidades fuente** (antes 8), controladas por LampHeight en
 MovementSettings.h. El centro local del cristal se obtiene del material de la
 farola. Su offset XYZ se vuelve a escalar y rotar antes de sumar la traslacion:
 la luz acompaña tanto la nueva altura como el brazo lateral del foco. La prueba
 compara cada luz con el centro del cristal transformado por la matriz completa.
-La iluminacion tiene atenuacion y alcance de 28 unidades fuente en el Zocalo.
+El nuevo offset vertical es 9.40048 unidades fuente. El shader admite las doce
+Point Lights; la iluminacion tiene atenuacion y alcance de 38 unidades fuente
+dentro de los limites exteriores del Zocalo.
 
 El arco mantiene estructura con Kd blanco puro y flores individuales con el atlas
 `Pasillo/tex_florCempa.png`, comprobado contra sus UV.
@@ -253,7 +280,8 @@ prueba entrada/salida de pasto a 30/60/144 FPS y comprueba las tapas elevadas de
 escenario real. Comprueba exactamente una iglesia, repeticion de las tres casas,
 orientacion interior, cobertura exterior y ausencia de edificios en el acceso al
 Pasillo. Recorre calle/banqueta/Pasillo en ambos sentidos a 30/60/144 FPS y prueba
-rampas y pisos invertidos. Comprueba la altura y alineacion de las ocho luces.
+rampas y pisos invertidos. Comprueba las proporciones del kiosko y las ocho bancas,
+las cuatro esquinas exteriores y la altura/alineacion de las doce luces.
 Guarda vistas del paso, del personaje sobre la entrada y de la laguna. Una prueba
 en GPU comprueba que el agua produce imagenes distintas en dos tiempos.
 Una prueba de framebuffer

@@ -17,7 +17,8 @@ public:
         glm::vec3 base;
         glm::vec3 light;
     };
-    std::array<Instance, 8> instances;
+    static constexpr size_t Count=12;
+    std::array<Instance, Count> instances;
 
     void Build(const Model& lamp, const Model* environment, const GroundSurface& ground,
         const glm::vec3& sourceOrigin, float worldScale)
@@ -29,6 +30,25 @@ public:
         if (environment && (!environment->GetMaterialBounds("Material.006", floorMin, floorMax) ||
             !environment->GetMaterialBounds("Material.014", kioskMin, kioskMax)))
             throw std::runtime_error("No se encontraron el suelo y el quiosco del Zocalo.");
+        if(!environment)
+        {
+            const glm::vec3 anchor((kioskMin.x+kioskMax.x)*.5f,floorMax.y,(kioskMin.z+kioskMax.z)*.5f);
+            kioskMin=anchor+(kioskMin-anchor)*MovementSettings::KioskScale;
+            kioskMax=anchor+(kioskMax-anchor)*MovementSettings::KioskScale;
+        }
+        glm::vec3 yellowMin(-184.399033f,0,261.558807f),yellowMax(-43.978149f,2.038685f,401.612457f);
+        glm::vec3 borderMin(-195.836182f,0,250.082703f),borderMax(-32.048828f,2.038686f,412.847565f);
+        if(environment)
+        {
+            yellowMin=glm::vec3((std::numeric_limits<float>::max)());yellowMax=glm::vec3((std::numeric_limits<float>::lowest)());
+            for(const char* name:{"Material.016","Material.017","Material.018","Material.019"})
+            {
+                glm::vec3 lo,hi;
+                if(!environment->GetMaterialBounds(name,lo,hi))throw std::runtime_error("Falta la linea amarilla perimetral.");
+                yellowMin=glm::min(yellowMin,lo);yellowMax=glm::max(yellowMax,hi);
+            }
+            if(!environment->GetMaterialBounds("Material.020",borderMin,borderMax))throw std::runtime_error("Falta la calle exterior.");
+        }
         glm::vec3 glassMin, glassMax;
         if (!lamp.GetMaterialBounds("Material.002", glassMin, glassMax))
             throw std::runtime_error("La farola no contiene su material de cristal.");
@@ -38,27 +58,43 @@ public:
         const float lampScale = MovementSettings::LampHeight * worldScale / (lamp.GetMaxBounds().y - lamp.GetMinBounds().y);
         // El poste de este export esta centrado en XZ=(0,0), no en el centro del brazo lateral.
         const glm::vec3 footAnchor(0.0f, lamp.GetMinBounds().y, 0.0f);
+        glm::vec3 footMin,footMax;
+        const float modelHeight=lamp.GetMaxBounds().y-lamp.GetMinBounds().y;
+        if(!lamp.GetMaterialSectionBounds("Material.001",1,footAnchor.y,footAnchor.y+modelHeight*.07f,footMin,footMax))
+            throw std::runtime_error("Falta el perfil de la base de las farolas.");
+        const float footRadius=std::sqrt(std::max(footMin.x*footMin.x,footMax.x*footMax.x)+
+            std::max(footMin.z*footMin.z,footMax.z*footMax.z))*lampScale/worldScale;
+        const float outside=footRadius+.15f;
         const glm::vec2 center((kioskMin.x + kioskMax.x) * 0.5f, (kioskMin.z + kioskMax.z) * 0.5f);
         const float inset = 4.0f;
         const float radius = 0.5f * std::max(kioskMax.x - kioskMin.x, kioskMax.z - kioskMin.z) + 6.0f;
-        const std::array<glm::vec2, 8> sites = {
+        const std::array<glm::vec2, Count> sites = {
             glm::vec2(floorMin.x + inset, floorMin.z + inset),
             glm::vec2(floorMax.x - inset, floorMin.z + inset),
             glm::vec2(floorMax.x - inset, floorMax.z - inset),
             glm::vec2(floorMin.x + inset, floorMax.z - inset),
             center + glm::vec2(-radius, 0), center + glm::vec2(radius, 0),
-            center + glm::vec2(0, -radius), center + glm::vec2(0, radius)
+            center + glm::vec2(0, -radius), center + glm::vec2(0, radius),
+            glm::vec2(yellowMin.x-outside,yellowMin.z-outside),
+            glm::vec2(yellowMax.x+outside,yellowMin.z-outside),
+            glm::vec2(yellowMax.x+outside,yellowMax.z+outside),
+            glm::vec2(yellowMin.x-outside,yellowMax.z+outside)
         };
-        region = glm::vec4((floorMin.x - sourceOrigin.x) * worldScale,
-            (floorMin.z - sourceOrigin.z) * worldScale,
-            (floorMax.x - sourceOrigin.x) * worldScale,
-            (floorMax.z - sourceOrigin.z) * worldScale);
-        range = 28.0f * worldScale;
+        region = glm::vec4((borderMin.x - sourceOrigin.x) * worldScale,
+            (borderMin.z - sourceOrigin.z) * worldScale,
+            (borderMax.x - sourceOrigin.x) * worldScale,
+            (borderMax.z - sourceOrigin.z) * worldScale);
+        range = 38.0f * worldScale;
         for (size_t i = 0; i < sites.size(); ++i)
         {
-            if (sites[i].x <= floorMin.x || sites[i].x >= floorMax.x ||
-                sites[i].y <= floorMin.z || sites[i].y >= floorMax.z)
+            if (i<8&&(sites[i].x <= floorMin.x || sites[i].x >= floorMax.x ||
+                sites[i].y <= floorMin.z || sites[i].y >= floorMax.z))
                 throw std::runtime_error("Una farola queda fuera de la plaza.");
+            if(i>=8&&(!(sites[i].x+footRadius<yellowMin.x||sites[i].x-footRadius>yellowMax.x)||
+                !(sites[i].y+footRadius<yellowMin.z||sites[i].y-footRadius>yellowMax.z)||
+                sites[i].x-footRadius<borderMin.x||sites[i].x+footRadius>borderMax.x||
+                sites[i].y-footRadius<borderMin.z||sites[i].y+footRadius>borderMax.z))
+                throw std::runtime_error("Una farola exterior invade la linea amarilla o sale de la calle.");
             float floor = floorMax.y;
             ground.Sample(sites[i].x, sites[i].y, floorMax.y, floor);
             const glm::vec3 source(sites[i].x, floor, sites[i].y);
@@ -92,14 +128,14 @@ public:
             if(glm::length(crystalCenter-instance.light)>.001f||std::abs(height-MovementSettings::LampHeight*worldScale)>.001f)
                 throw std::runtime_error("La luz no coincide con el cristal de la farola ampliada.");
         }
-        std::cout<<"Farolas OK: altura "<<MovementSettings::LampHeight<<", 8 luces en el centro del cristal; offset Y "
+        std::cout<<"Farolas OK: altura "<<MovementSettings::LampHeight<<", 12 luces (4 exteriores) en el centro del cristal; offset Y "
             <<(instances[0].light.y-instances[0].base.y)/worldScale<<" unidades fuente."<<std::endl;
     }
 
     void Upload(const Shader& shader) const
     {
         shader.Use();
-        glUniform1i(glGetUniformLocation(shader.Program, "pointLightCount"), 8);
+        glUniform1i(glGetUniformLocation(shader.Program, "pointLightCount"), static_cast<int>(Count));
         glUniform4fv(glGetUniformLocation(shader.Program, "pointLightRegion"), 1, &region[0]);
         for (size_t i = 0; i < instances.size(); ++i)
         {

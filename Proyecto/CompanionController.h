@@ -48,7 +48,7 @@ private:
             glm::vec3 desired=owner.IsFrozen()?glm::vec3(0):owner.velocity;
             desired.y=0;desired+=error*3.5f;
             if(glm::length(error)<.10f*scale&&glm::length(owner.velocity)<.05f*scale)desired=glm::vec3(0);
-            const float maxSpeed=9.0f*scale,speed=glm::length(desired);
+            const float maxSpeed=std::max(9.0f,MovementSettings::RunSpeed*1.35f)*scale,speed=glm::length(desired);
             if(speed>maxSpeed)desired*=maxSpeed/speed;
             const float decay=std::exp(-9.0f*dt);
             position+=desired*dt+(velocity-desired)*((1-decay)/9.0f);
@@ -69,7 +69,7 @@ private:
         const float speed=glm::length(delta)/std::max(.00001f,dt)/scale;
         running=glm::mix(running,glm::clamp((speed-2.0f)/3.5f,0.0f,1.0f),1-std::exp(-7.0f*dt));
         gait=glm::mix(gait,state==State::Special?0.0f:glm::clamp(speed/1.2f,0.0f,1.0f),1-std::exp(-10.0f*dt));
-        phase=std::fmod(phase+glm::length(delta)*6.28318530718f/(height*glm::mix(.85f,1.25f,running)),6.28318530718f);
+        phase=std::fmod(phase+std::min(glm::length(delta)*6.28318530718f/(height*glm::mix(.85f,1.25f,running)),dt*6.28318530718f*4.2f),6.28318530718f);
         if(ground)ConformToGround(*ground,origin,scale,dt,MovementSettings::CharacterHeight*.8f);
         if(state==State::Special)
         {

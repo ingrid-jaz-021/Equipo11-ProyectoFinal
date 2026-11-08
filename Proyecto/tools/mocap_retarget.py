@@ -139,6 +139,36 @@ def audit_arm_vertices(rig,meshes,out):
         if maximum>.001:raise RuntimeError('Geometria del brazo por encima del hombro: '+clip+' '+str(maximum))
     (Path(out)/'arm-safety-audit.json').write_text(json.dumps(result,indent=2))
 
+def audit_shoulder_clearance(rig,meshes,out):
+    """Intersect the DEFORMED arm surface with the torso, beyond the joint seam."""
+    from mathutils.bvhtree import BVHTree
+    parts=[]
+    for obj in meshes:
+        groups={g.index:g.name for g in obj.vertex_groups}
+        arm_weights=[sum(g.weight for g in v.groups if groups[g.group].startswith(('UpperArm.','Forearm.','Hand.'))) for v in obj.data.vertices]
+        obj.data.calc_loop_triangles()
+        if obj.name=='Hand_L.003':
+            triangles=[tuple(t.vertices) for t in obj.data.loop_triangles if all(arm_weights[i]>.95 for i in t.vertices)]
+            parts.append((obj,'arm',triangles))
+        elif obj.name=='Hand_L.002':
+            triangles=[tuple(t.vertices) for t in obj.data.loop_triangles if all(arm_weights[i]<.05 for i in t.vertices)]
+            parts.append((obj,'torso',triangles))
+    if {p[1] for p in parts}!={'arm','torso'}:raise RuntimeError('Faltan las superficies de brazos/torso para auditar hombros.')
+    result={}
+    for clip in ['Idle','Walk','Run']:
+        action=bpy.data.actions[clip];rig.animation_data.action=action;collisions=0
+        for f in range(int(action.frame_range[1])+1):
+            bpy.context.scene.frame_set(f);bpy.context.view_layer.update();deps=bpy.context.evaluated_depsgraph_get();trees={}
+            for obj,kind,triangles in parts:
+                evaluated=obj.evaluated_get(deps)
+                trees[kind]=BVHTree.FromPolygons([evaluated.matrix_world@v.co for v in evaluated.data.vertices],triangles,all_triangles=True)
+            collisions+=len(trees['arm'].overlap(trees['torso']))
+        result[clip]={'frames':int(action.frame_range[1])+1,'arm_torso_triangle_intersections':collisions,
+            'attachment_seam_excluded':'arm weights .05.. .95'}
+    (Path(out)/'shoulder-clearance-audit.json').write_text(json.dumps(result,indent=2))
+    if any(v['arm_torso_triangle_intersections'] for v in result.values()):
+        raise RuntimeError('La malla de los brazos atraviesa el torso: '+str(result))
+
 def bake_mocap(rig,meshes,out):
     root=Path(out);scene=bpy.context.scene;scene.render.fps=60;rig.animation_data_create()
     sources={n:Capture(root/'mocap'/file) for n,file in [('Walk','07_01.bvh'),('Run','09_01.bvh'),('Idle','77_02.bvh')]}
@@ -200,5 +230,6 @@ def bake_mocap(rig,meshes,out):
         provenance[name]={'file':'mocap/'+('07_01.bvh' if name=='Walk' else '09_01.bvh' if name=='Run' else '77_02.bvh'),
             'capture_frames':[start,end],'phase_offset':offset,'source_fps':1/capture.dt,'root_travel_source':travel.length}
     audit_arm_vertices(rig,meshes,out)
+    audit_shoulder_clearance(rig,meshes,out)
     (root/'mocap-retarget.json').write_text(json.dumps(provenance,indent=2),encoding='utf8')
     return clips

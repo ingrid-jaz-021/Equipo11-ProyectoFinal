@@ -45,16 +45,16 @@
   "joint_ranges_degrees": {
     "Idle": {
       "elbowL": {
-        "min": 20.284335070691597,
-        "max": 22.719184811679835
+        "min": 20.28432482540784,
+        "max": 22.719176273943372
       },
       "kneeL": {
         "min": 13.685666261653829,
         "max": 18.431207418671463
       },
       "elbowR": {
-        "min": 24.50465090223453,
-        "max": 27.113419457606096
+        "min": 24.504633826761605,
+        "max": 27.113412627416928
       },
       "kneeR": {
         "min": 0.0,
@@ -64,15 +64,15 @@
     "Walk": {
       "elbowL": {
         "min": 5.999988641020987,
-        "max": 48.2094559168093
+        "max": 48.20947299228222
       },
       "kneeL": {
         "min": 0.0,
         "max": 67.80268000388045
       },
       "elbowR": {
-        "min": 12.960591308611846,
-        "max": 47.97616056042376
+        "min": 12.960575940686214,
+        "max": 47.97614348495083
       },
       "kneeR": {
         "min": 0.0,
@@ -81,22 +81,41 @@
     },
     "Run": {
       "elbowL": {
-        "min": 80.35330286794061,
-        "max": 93.99459765942511
+        "min": 80.35329603775145,
+        "max": 93.99457716885759
       },
       "kneeL": {
         "min": 0.0,
         "max": 116.29603273354132
       },
       "elbowR": {
-        "min": 63.50460588373151,
-        "max": 86.60796663810976
+        "min": 63.50461271392067,
+        "max": 86.60795297773141
       },
       "kneeR": {
         "min": 0.0,
         "max": 107.67054200056907
       }
     }
+  },
+  "shoulder_geometry": {
+    "modified_vertices": {
+      "Hand_L.002": 76,
+      "Hand_L.003": 1414
+    },
+    "t_pose_joint_x": {
+      "shoulder": 0.245,
+      "elbow": 0.405,
+      "wrist": 0.54,
+      "palm_tip": 0.585
+    },
+    "upper_arm_length": 0.16,
+    "forearm_length": 0.135,
+    "arm_radial_scale": [
+      0.78,
+      0.7
+    ],
+    "root_weights": "Chest -> UpperArm, smooth transition x=.20.. .275; shared with sleeve"
   },
   "deformation_support_loops": 2,
   "foot_contact_baked": true,
