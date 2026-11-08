@@ -106,6 +106,33 @@ los terminos originales se conservan en `mocap/ATTRIBUTION.md` y `READMEFIRST.tx
 Fuente: https://mocap.cs.cmu.edu/ ; conversion BVH:
 https://github.com/una-dinosauria/cmu-mocap .
 
+## NPC sentado y Pan de Muerto
+
+El modelo fuente de `Models/Persona Kiosko/` se conserva. El activo es
+`Models/KioskNpcRig/KioskNpcRig.fbx`, generado por `tools/build_kiosk_npc.py`:
+armadura de 23 nodos (17 deformantes), pesos suaves y seis clips sentados.
+No reutiliza los limites de brazos de la niña. Se doblan muslos, rodillas,
+hombros, codos y muñecas, manteniendo las piernas sentadas durante todo el ciclo.
+Se copian sus cuatro texturas y se guarda tambien el Blender editable.
+
+El cargador mide el asiento horizontal y el respaldo de cada una de las ocho
+bancas. El NPC utiliza la mas cercana al punto inicial. Su orientacion sigue
+el frente de la banca; NpcSeatAnchor se coloca sobre el asiento y la escala se
+calcula para apoyar los pies en el piso, sin depender de la altura de una pose T.
+
+`KioskNpc.h` implementa cuatro estados que conservan el tiempo sobrante entre
+transiciones, independientemente de los FPS:
+
+- Idle (4.2 s): 3 s sentado y 1.2 s llevando la mano al bolsillo.
+- Aparicion (0.6 s): se activa el render del pan sobre esa mano.
+- Comiendo (4.5 s): 1.2 s elevando el pan y 3.3 s reduciendo su escala de 1 a 0.05.
+- Fin (1.4 s): se oculta completamente el pan y vuelve la mano al regazo.
+
+Al terminar vuelve a Idle. El pan real de `Models/Pan de muerto/PanMuerto.obj`
+usa su MTL/textura y una matriz padre obtenida de NpcHand.R, con offset de palma
+y orientacion de la base del pan. No se mueve con una posicion fija independiente
+del esqueleto. Solo se dibuja en los estados Aparicion/Comiendo.
+
 ## Xoloitzcuintle acompanante
 
 El modelo activo es `Models/XoloRig/XoloRig.fbx`, con 24 huesos deformantes y
@@ -273,9 +300,9 @@ contiene los limites XZ medidos del material None.001 de `Laguna/Agua/Lago(Lag).
 Se carga solo el plano; ese OBJ auxiliar contiene ademas toda la escena duplicada.
 El cargador conserva tambien el pequeno perfil `tarima_madera.001` del muelle.
 Se seleccionan sus dos tramos del lado Laguna (X positivo) y se unen sus limites
-con los de la cuenca. La superficie alcanza ahora X=4.976494, frente al antiguo
-69.67717; cubre el muelle completo de X=4.976494 a 73.178017. El plano mide
-434.33875 x 369.6384 unidades fuente y su centro se desplaza hacia el Pasillo.
+con los de la cuenca. La superficie alcanza ahora X=4.986202, frente al antiguo
+69.67717; cubre el muelle completo de X=4.986202 a 73.178017. El plano mide
+434.329 x 369.6384 unidades fuente y su centro se desplaza hacia el Pasillo.
 La matriz usa translate al nuevo centro y scale independiente en X/Z. Se verifican
 las cuatro esquinas del muelle contra la matriz inversa del plano.
 
@@ -289,6 +316,20 @@ de cuatro parches con offsets estables elimina la cuadricula visible de la foto;
 textureGrad mantiene el LOD estable durante el desplazamiento. El agua
 escribe profundidad y queda ocluida por las plataformas y esculturas; se dibuja
 antes del skybox y de los planos transparentes.
+
+## Geometria y madera del muelle
+
+`DockSurface.h` alinea las esquinas XZ y niveles Y de los dos bloques positivos
+en X de `tarima_madera.001`; elimina la desviacion de las esquinas de la tabla
+estrecha. El mismo arreglo se usa en render, raycasting, medicion del agua y
+amarre del bote. La tarima de la ofrenda occidental conserva su geometria y foto.
+
+Los 20 triangulos del muelle tienen normales por cara y UV nuevas, separadas
+en los cantos para evitar proyecciones estiradas. Una repeticion cubre 1.6 x 3.2
+unidades fuente: aproximadamente 42.6 x 21.25 repeticiones sobre el conjunto.
+`images/MuelleMadera.png` es una textura procedural de 1024x2048 con veta,
+tablones y juntas, regenerable con `tools/build_dock_texture.py` (Python estandar).
+Usa GL_REPEAT, mipmaps trilineales y anisotropia mediante Texture2D.h.
 
 ## Cerca perimetral de la Laguna
 
@@ -344,6 +385,12 @@ seguida por la misma correccion vertical de GroundSurface. FullSupport solo se
 usa para colocar ambos personajes de forma segura al desembarcar. La prueba
 camina desde 12 unidades antes de la tabla hasta el trigger, sin teletransportar
 al personaje al borde, y exige cero bloqueos a 30/60/144 FPS.
+
+La flecha del bote es una piramide invertida de seis triangulos, creada en
+BoatNavigation.h. Su material amarillo emisivo permanece brillante de noche.
+La matriz sigue el centro del casco y agrega 4.9 + 0.55*sin(1.8*glfwGetTime())
+unidades de altura, sin alterar la Y fisica del barco. Se descarta por frustum
+independientemente del casco y no necesita cargar otro modelo o textura.
 
 ## Rendimiento del render loop
 
@@ -422,6 +469,12 @@ timon, altura exacta, colision de casco, desembarque/reembarque en las cuatro
 orillas y regreso al muelle a 30/60/144 FPS. La prueba completa usa el suelo real,
 simula E/F/C, verifica la pausa de bote/huesos en camara libre y guarda las
 capturas 610/640/670/690/720/750 de embarque, navegacion y desembarque.
+El NPC prueba los cuatro estados y dos ciclos completos a 30/60/144 FPS,
+incluido el anclaje a la mano y la reduccion monotona del pan. Las capturas
+400/405/410/415/417 (modo rapido) y 780/785/790/795/797 (escena completa)
+revisan reposo, aparicion, comida, retorno y reinicio sobre la banca.
+Se comprueban tambien las UV repetidas del muelle y la oscilacion de la flecha
+sin modificar la altura del bote; se repite el recorrido real de acceso al muelle.
 Ambos modos caminan hasta el borde del muelle y embarcan a 30/60/144 FPS; el
 modo completo usa el piso y el escalon originales del OBJ.
 Un segundo argumento opcional define el prefijo de capturas TGA.

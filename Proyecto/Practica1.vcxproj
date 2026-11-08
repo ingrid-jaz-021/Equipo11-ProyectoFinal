@@ -33,6 +33,8 @@
     <ClInclude Include="RenderState.h" />
     <ClInclude Include="Frustum.h" />
     <ClInclude Include="RenderMetrics.h" />
+    <ClInclude Include="KioskNpc.h" />
+    <ClInclude Include="DockSurface.h" />
     <ClInclude Include="MovementSettings.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="ZocaloLighting.h" />
@@ -76,6 +78,15 @@
     <None Include="Models\Farola\Farola.obj" />
     <None Include="Models\barquito.obj" />
     <None Include="Models\barquito.mtl" />
+    <None Include="Models\KioskNpcRig\KioskNpcRig.fbx" />
+    <None Include="Models\KioskNpcRig\KioskNpcRig.blend" />
+    <None Include="Models\Persona Kiosko\PersonaZoc.obj" />
+    <None Include="Models\Pan de muerto\PanMuerto.obj" />
+    <None Include="Models\Pan de muerto\PanMuerto.mtl" />
+    <None Include="Models\Pan de muerto\Texturapan.jpg" />
+    <None Include="images\MuelleMadera.png" />
+    <None Include="tools\build_kiosk_npc.py" />
+    <None Include="tools\build_dock_texture.py" />
     <None Include="Models\Farola\Farola.mtl" />
     <None Include="Models\niña zocalo.mtl" />
     <None Include="Shader\modelLoading.frag" />

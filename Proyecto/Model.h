@@ -7,6 +7,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -24,12 +25,14 @@
 #include "Texture2D.h"
 #include "FloorUV.h"
 #include "MovementSettings.h"
+#include "DockSurface.h"
 
 struct ModelOptions
 {
     GroundSurface* ground = nullptr;
     bool skeletal = false;
     std::vector<std::string> boundaryProfileMaterials;
+    bool requireLocomotion=true;
 };
 
 class Model
@@ -86,6 +89,8 @@ public:
     const glm::vec3& GetMinBounds() const { return minBounds; }
     const glm::vec3& GetMaxBounds() const { return maxBounds; }
     SkeletalAnimator* Animator() { return skeleton.get(); }
+    struct BenchSeat{glm::vec3 anchor;float yaw;float floor;};
+    const std::vector<BenchSeat>& BenchSeats() const{return benchSeats;}
     void ValidateLayout() const
     {
         if(!options.ground)return;
@@ -100,6 +105,8 @@ public:
             throw std::runtime_error("La fuente no tiene escala independiente o invade los pilares.");
         std::cout<<"Proporciones OK: kiosko x"<<MovementSettings::KioskScale<<", "<<benchCount<<" bancas x"<<MovementSettings::BenchScale<<", respaldo maximo "<<benchMaxHeight<<"."<<std::endl;
         std::cout<<"Fuente independiente x"<<MovementSettings::FountainScale<<", ancho "<<fountainHi.x-fountainLo.x<<"; kiosko sin cambios."<<std::endl;
+        if(dockTriangles<8||dockUvSpan.x<20||dockUvSpan.y<10)throw std::runtime_error("El muelle no tiene geometria/UV repetidas correctas.");
+        std::cout<<"Muelle OK: "<<dockTriangles<<" triangulos alineados; UV repetidas "<<dockUvSpan.x<<" x "<<dockUvSpan.y<<"."<<std::endl;
     }
     bool GetMaterialBounds(const std::string& name, glm::vec3& min, glm::vec3& max) const
     {
@@ -153,6 +160,8 @@ private:
     glm::mat4 fountainTransform=glm::mat4(1);
     float floorLevel=2.005836f,kioskRawHeight=1,fountainRawWidth=1,benchMaxHeight=0;
     size_t benchCount=0;
+    std::vector<BenchSeat> benchSeats;
+    size_t dockTriangles=0;glm::vec2 dockUvSpan=glm::vec2(0);
     glm::vec3 minBounds = glm::vec3((std::numeric_limits<float>::max)());
     glm::vec3 maxBounds = glm::vec3((std::numeric_limits<float>::lowest)());
 
@@ -189,7 +198,7 @@ private:
         directory = separator == std::string::npos ? "." : path.substr(0, separator);
         if (options.skeletal)
         {
-            skeleton = std::make_unique<SkeletalAnimator>(scene);
+            skeleton = std::make_unique<SkeletalAnimator>(scene,options.requireLocomotion);
             std::cout << "Esqueleto real: " << skeleton->BoneCount() << " huesos deformantes, "
                 << skeleton->ClipCount() << " clips." << std::endl;
         }
@@ -301,6 +310,25 @@ private:
             const glm::vec3 sourceAnchor((lo.x+hi.x)*.5f,lo.y,(lo.z+hi.z)*.5f),targetAnchor(sourceAnchor.x,floorLevel,sourceAnchor.z);
             auto transform=glm::translate(glm::mat4(1),targetAnchor);
             transform=glm::scale(transform,glm::vec3(MovementSettings::BenchScale));transform=glm::translate(transform,-sourceAnchor);
+            // Detectar el asiento por AREA horizontal, y el respaldo por sus
+            // vertices altos. No usar el centro de toda la banca para sentar.
+            struct SeatBin{double area=0;glm::vec3 weighted=glm::vec3(0);};std::map<int,SeatBin> seatBins;
+            for(size_t i=0;i+2<localIndices.size();i+=3)
+            {
+                const auto a=localVertices[localIndices[i]].Position,b=localVertices[localIndices[i+1]].Position,c=localVertices[localIndices[i+2]].Position;
+                const auto n=glm::cross(b-a,c-a);const float area=glm::length(n),y=(a.y+b.y+c.y)/3;
+                if(area>1e-6f&&std::abs(n.y)>.95f*area&&y>lo.y+(hi.y-lo.y)*.22f&&y<lo.y+(hi.y-lo.y)*.72f)
+                {auto& bin=seatBins[static_cast<int>(std::round(y*50))];bin.area+=area;bin.weighted+=(a+b+c)*(area/3);}
+            }
+            if(seatBins.empty())throw std::runtime_error("No se pudo medir el asiento de una banca.");
+            const auto seatIt=std::max_element(seatBins.begin(),seatBins.end(),[](const auto& a,const auto& b){return a.second.area<b.second.area;});
+            const auto seat=seatIt->second.weighted/static_cast<float>(seatIt->second.area);
+            glm::vec3 back(0);unsigned backCount=0;
+            for(const auto& v:localVertices)if(v.Position.y>lo.y+(hi.y-lo.y)*.80f){back+=v.Position;++backCount;}
+            back/=static_cast<float>(std::max(1u,backCount));glm::vec3 front=seat-back;front.y=0;
+            if(glm::length(front)<.02f)front=glm::vec3(-114-seat.x,0,331.5f-seat.z);
+            front=glm::normalize(front);
+            benchSeats.push_back({glm::vec3(transform*glm::vec4(seat,1)),std::atan2(front.x,front.z),floorLevel});
             benchMaxHeight=std::max(benchMaxHeight,(hi.y-lo.y)*MovementSettings::BenchScale);++benchCount;
             AddPart(localVertices,localIndices,{},material,name,transform);
         }
@@ -326,6 +354,7 @@ private:
         {
             Vertex vertex{};
             vertex.Position = glm::vec3(mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z);
+            if(options.ground&&materialName=="tarima_madera.001")vertex.Position=DockSurface::AlignVertex(vertex.Position);
             vertex.Normal = mesh->HasNormals()
                 ? glm::vec3(mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z)
                 : glm::vec3(0.0f, 1.0f, 0.0f);
@@ -371,13 +400,38 @@ private:
         const glm::vec2 tile = options.ground ? ZocaloTileSize(materialName) : glm::vec2(0);
         if (tile.x > 0.0f)
             for (auto& vertex : vertices) vertex.TexCoords = ProjectFloorUV(vertex.Position, vertex.Normal, tile);
-        if(options.ground&&materialName=="LoD_0SG")AddBenches(vertices,indices,material,materialName);
+        if(options.ground&&materialName=="tarima_madera.001")AddDock(vertices,indices,material,materialName);
+        else if(options.ground&&materialName=="LoD_0SG")AddBenches(vertices,indices,material,materialName);
         else
         {
             const bool kiosk=options.ground&&materialName=="Material.014";
             const bool fountain=options.ground&&(materialName=="Material.004"||materialName=="Material.005"||materialName=="Material.007");
             AddPart(vertices,indices,skin,material,materialName,kiosk?kioskTransform:fountain?fountainTransform:glm::mat4(1));
         }
+    }
+    void AddDock(const std::vector<Vertex>& vertices,const std::vector<GLuint>& indices,const MeshMaterial& original,const std::string& name)
+    {
+        std::vector<GLuint> westIndices,eastIndices;std::vector<Vertex> east;
+        glm::vec2 uvLo((std::numeric_limits<float>::max)()),uvHi((std::numeric_limits<float>::lowest)());
+        for(size_t i=0;i+2<indices.size();i+=3)
+        {
+            if(!DockSurface::IsDock(vertices[indices[i]].Position))
+            {westIndices.insert(westIndices.end(),indices.begin()+i,indices.begin()+i+3);continue;}
+            const auto a=vertices[indices[i]].Position,b=vertices[indices[i+1]].Position,c=vertices[indices[i+2]].Position;
+            const auto cross=glm::cross(b-a,c-a);if(glm::length(cross)<1e-6f)continue;
+            const auto normal=glm::normalize(cross);
+            for(int j=0;j<3;++j)
+            {
+                auto v=vertices[indices[i+j]];v.Normal=normal;v.TexCoords=DockSurface::UV(v.Position,normal);
+                uvLo=glm::min(uvLo,v.TexCoords);uvHi=glm::max(uvHi,v.TexCoords);
+                eastIndices.push_back(static_cast<GLuint>(east.size()));east.push_back(v);
+            }
+            ++dockTriangles;
+        }
+        if(!westIndices.empty())AddPart(vertices,westIndices,{},original,name,glm::mat4(1));
+        if(east.empty())throw std::runtime_error("No se separo el muelle positivo de la tarima occidental.");
+        MeshMaterial wood=original;wood.diffuseTexture=LoadTexture("../../images/MuelleMadera.png");wood.diffuseColor=glm::vec3(1);
+        dockUvSpan=glm::max(dockUvSpan,uvHi-uvLo);AddPart(east,eastIndices,{},wood,name,glm::mat4(1));
     }
     GLuint LoadTexture(std::string relativePath)
     {

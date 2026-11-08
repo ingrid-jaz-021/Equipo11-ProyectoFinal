@@ -175,7 +175,7 @@ class SkeletalAnimator
         return result;
     }
 public:
-    explicit SkeletalAnimator(const aiScene* scene)
+    explicit SkeletalAnimator(const aiScene* scene,bool requireLocomotion=true)
     {
         ReadNode(scene->mRootNode,-1);
         inverseRoot=glm::inverse(M(scene->mRootNode->mTransformation));
@@ -221,8 +221,9 @@ public:
             if(lower.find("run")!=std::string::npos) run=id;
             clips.push_back(std::move(clip));
         }
-        if(bones.empty()||idle<0||walk<0||run<0)
+        if(bones.empty()||clips.empty()||(requireLocomotion&&(idle<0||walk<0||run<0)))
             throw std::runtime_error("El FBX necesita huesos y clips Idle, Walk y Run.");
+        if(idle<0)idle=0;if(walk<0)walk=idle;if(run<0)run=idle;
         palette.resize(bones.size(),glm::mat4(1));
         InitializeArmLimits();
         Evaluate(0.0f,0.0f,0.0f);
@@ -297,6 +298,20 @@ public:
             palette[i]=inverseRoot*global[bones[i].node]*bones[i].offset;
     }
     const std::vector<glm::mat4>& Palette() const { return palette; }
+    int ClipIndex(const std::string& name) const{return FindClip(name);}
+    void PlayClip(int clip,float time,bool loop=false)
+    {
+        if(clip<0||clip>=static_cast<int>(clips.size()))throw std::runtime_error("Indice de clip invalido.");
+        for(size_t i=0;i<nodes.size();++i)
+        {
+            const auto pose=PoseNode(static_cast<int>(i),clip,time,loop);
+            const auto local=glm::translate(glm::mat4(1),pose.p)*glm::mat4_cast(pose.q)*glm::scale(glm::mat4(1),pose.s);
+            globalPose[i]=(nodes[i].parent<0?glm::mat4(1):globalPose[nodes[i].parent])*local;
+            ConstrainArm(static_cast<int>(i));
+        }
+        for(size_t i=0;i<bones.size();++i)palette[i]=inverseRoot*globalPose[bones[i].node]*bones[i].offset;
+    }
+    glm::mat4 JointMatrix(const std::string& name) const{return inverseRoot*globalPose.at(nodeIds.at(name));}
     glm::vec3 JointPosition(const std::string& name) const
     {return glm::vec3(inverseRoot*globalPose.at(nodeIds.at(name))*glm::vec4(0,0,0,1));}
     bool HasArmSafety() const{return armLimits.size()==2;}

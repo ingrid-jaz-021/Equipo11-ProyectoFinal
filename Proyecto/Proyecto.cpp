@@ -31,6 +31,7 @@
 #include "LakeFence.h"
 #include "CompanionController.h"
 #include "BoatNavigation.h"
+#include "KioskNpc.h"
 
 namespace
 {
@@ -627,6 +628,8 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     companion.AttachCompanion(dog.Animator());
     companion.Configure(dog.GetMinBounds(),dog.GetMaxBounds(),MovementSettings::CompanionHeight*ENVIRONMENT_SCALE);
     companion.ResetBeside(player,ENVIRONMENT_SCALE);
+    Model npcModel("Models/KioskNpcRig/KioskNpcRig.fbx",keepLoading,{nullptr,true,{},false});
+    Model breadModel("Models/Pan de muerto/PanMuerto.obj",keepLoading);
     Model boatModel("Models/barquito.obj",keepLoading);
     if(validate&&characterOnly)
     {
@@ -651,6 +654,8 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             keepLoading, ModelOptions{ &ground, false, {"TapeteAserrin1.002","tarima_madera.001"} });
         if (validate) { environment->ValidateLayout(); ValidateSceneGrass(ground); ValidatePasilloGround(ground); }
     }
+    KioskNpc npc;npc.ConfigureNpc(npcModel,breadModel,environment.get(),SOURCE_SPAWN,ENVIRONMENT_SCALE);
+    if(validate)npc.Validate();
     Model lamp("Models/Farola/Farola.obj", keepLoading,{nullptr,false,{"Material.001"}});
     ZocaloLighting plazaLights;
     plazaLights.Build(lamp, environment.get(), ground, SOURCE_SPAWN, ENVIRONMENT_SCALE);
@@ -772,6 +777,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         }
         else DoMovement(window,dt,environment?&ground:nullptr);
         UpdateFollowCamera(dt);
+        npc.UpdateNpc(dt);
         if (validate && environment)
         {
             if (frame == 130)
@@ -873,6 +879,12 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
                 SetValidationCamera(player.position+glm::vec3(player.height*2.0f,player.height*0.60f,0),
                     player.position+glm::vec3(0,player.height*0.55f,0));
             }
+            const int npcStart=environment?780:400;
+            if(frame==npcStart||frame==npcStart+5||frame==npcStart+10||frame==npcStart+15||frame==npcStart+17)
+            {
+                const double sample=frame==npcStart?1.0:frame==npcStart+5?4.4:frame==npcStart+10?7.7:frame==npcStart+15?9.9:11.2;
+                npc.ResetCycle();npc.UpdateNpc(sample);SetValidationCamera(npc.ViewEye(),npc.ViewTarget());
+            }
         }
         int width, height;
         glfwGetFramebufferSize(window, &width, &height);
@@ -894,7 +906,10 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             lamp.DrawInstances(lampShader,lampModels,projection*view);
             navigation->DrawShore(environmentShader,view,projection);
             DrawObject(boatModel,environmentShader,navigation->ModelMatrix(),view,projection);
+            navigation->DrawMarker(environmentShader,view,projection,now);
         }
+        DrawObject(npcModel,characterShader,npc.WorldMatrix(),view,projection,&npc);
+        if(npc.BreadVisible())DrawObject(breadModel,environmentShader,npc.BreadMatrix(),view,projection);
         DrawObject(girl, characterShader, player.ModelMatrix(), view, projection, &player);
         DrawObject(dog,characterShader,companion.ModelMatrix(),view,projection,&companion);
         if(water)water->Draw(view,projection,eye,now);
@@ -913,7 +928,9 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         const int actionFrame=environment?340:140;
         const bool captureAction=frame==actionFrame||frame==actionFrame+55||frame==actionFrame+96||frame==actionFrame+132||frame==actionFrame+180||frame==actionFrame+255;
         const bool captureBoat=environment&&(frame==610||frame==640||frame==670||frame==690||frame==720||frame==750);
-        if (validate && (captureBoat || captureAction || frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 305 || frame == 310 || frame == 315 || frame == 320 || frame == 325 || frame == 330 || frame == 335))
+        const int npcStart=environment?780:400;
+        const bool captureNpc=frame==npcStart||frame==npcStart+5||frame==npcStart+10||frame==npcStart+15||frame==npcStart+17;
+        if (validate && (captureNpc || captureBoat || captureAction || frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 305 || frame == 310 || frame == 315 || frame == 320 || frame == 325 || frame == 330 || frame == 335))
         {
             std::vector<float> depth(static_cast<size_t>(width) * height);
             glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, depth.data());

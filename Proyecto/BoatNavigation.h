@@ -18,7 +18,7 @@ public:
     {
         waterY=(area.min.y-origin.y)*scale;
         mooring=glm::vec3(area.dockMax.x+HalfLength+.65f,area.min.y,(area.dockMin.z+area.dockMax.z)*.5f);
-        AddShore(createGpu);Reset();
+        AddShore(createGpu);if(createGpu)BuildMarker();Reset();
         if(!CanFloat(position,yaw))throw std::runtime_error("El amarre inicial del bote invade el muelle.");
     }
     void Reset(){navigating=false;position=World(mooring);yaw=HalfPi;Anchor();}
@@ -76,6 +76,24 @@ public:
         actor.position=previous;actor.velocity=glm::vec3(0);return false;
     }
     glm::mat4 ModelMatrix() const{return glm::scale(Pose(),glm::vec3(scale));}
+    glm::mat4 MarkerMatrix(double seconds) const
+    {
+        const float bob=.55f*std::sin(static_cast<float>(seconds)*1.8f);
+        return glm::scale(glm::translate(glm::mat4(1),position+glm::vec3(0,(4.9f+bob)*scale,0)),glm::vec3(scale));
+    }
+    void DrawMarker(const Shader& shader,const glm::mat4& view,const glm::mat4& projection,double seconds) const
+    {
+        if(!marker)return;
+        const auto model=MarkerMatrix(seconds);
+        if(!TransformedBoundsVisible(ExtractFrustum(projection*view),{-.9f,0,-.9f},{.9f,1.9f,.9f},model))
+        {++RenderMetrics::culled;return;}
+        shader.Use();const auto normal=glm::mat3(1/scale);
+        glUniformMatrix4fv(shader.Uniform("model"),1,GL_FALSE,&model[0][0]);
+        glUniformMatrix4fv(shader.Uniform("view"),1,GL_FALSE,&view[0][0]);
+        glUniformMatrix4fv(shader.Uniform("projection"),1,GL_FALSE,&projection[0][0]);
+        glUniformMatrix3fv(shader.Uniform("normalMatrix"),1,GL_FALSE,&normal[0][0]);
+        marker->Draw(shader);
+    }
     void DrawShore(const Shader& shader,const glm::mat4& view,const glm::mat4& projection) const
     {
         if(!shore)return;
@@ -119,7 +137,19 @@ public:
 private:
     static constexpr float HalfWidth=2.3f,HalfLength=4.0f,HalfPi=1.57079632679f,ShoreWidth=4.0f;
     Area area;GroundSurface& ground;glm::vec3 origin,mooring,position;float scale,waterY,yaw=0,speed=0,turnRate=0;
-    bool navigating=false;std::unique_ptr<Mesh> shore;
+    bool navigating=false;std::unique_ptr<Mesh> shore,marker;
+    void BuildMarker()
+    {
+        const std::array<glm::vec3,5> p={glm::vec3(0),{-.9f,1.9f,-.9f},{.9f,1.9f,-.9f},{.9f,1.9f,.9f},{-.9f,1.9f,.9f}};
+        std::vector<Vertex> vertices;std::vector<GLuint> indices;
+        for(const auto& face:std::array<std::array<int,3>,6>{{{0,2,1},{0,3,2},{0,4,3},{0,1,4},{1,2,3},{1,3,4}}})
+        {
+            const auto normal=glm::normalize(glm::cross(p[face[1]]-p[face[0]],p[face[2]]-p[face[0]]));
+            for(int index:face){indices.push_back(static_cast<GLuint>(vertices.size()));vertices.push_back({p[index],normal,glm::vec2(0)});}
+        }
+        MeshMaterial bright;bright.diffuseColor={1,.76f,.02f};bright.emissiveColor={1.4f,.75f,.01f};
+        marker=std::make_unique<Mesh>(vertices,indices,bright,glm::vec3(-.9f,0,-.9f),glm::vec3(.9f,1.9f,.9f));
+    }
     glm::vec3 World(const glm::vec3& p) const{return (p-origin)*scale;}
     glm::vec3 Source(const glm::vec3& p) const{return p/scale+origin;}
     glm::mat4 Pose() const{return glm::rotate(glm::translate(glm::mat4(1),position),yaw,glm::vec3(0,1,0));}
@@ -221,6 +251,8 @@ inline void BoatNavigation::Validate(CharacterController& girl,CompanionControll
 {
     const auto require=[](bool ok,const char* message){if(!ok)throw std::runtime_error(message);};
     glm::vec3 reference(0);
+    const float high=MarkerMatrix(3.14159265359/3.6)[3].y,low=MarkerMatrix(3*3.14159265359/3.6)[3].y;
+    require(std::abs((high-low)/scale-1.1f)<.001f&&std::abs(position.y-waterY)<.001f,"La flecha no oscila independientemente del barco.");
     for(int fps:{30,60,144})
     {
         Reset();girl.SetFrozen(false);girl.Reset();girl.position=DockSpot();dog.ResetBeside(girl,scale);
