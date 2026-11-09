@@ -1,0 +1,22 @@
+{
+  "source": "AjoloteEntrada.blend",
+  "runtime": "AxoloteEntrada.fbx",
+  "clip": "AxoGreeting",
+  "duration": 8,
+  "deformingBones": 6,
+  "wristWaveDegrees": 16,
+  "phases": [
+    "idle",
+    "raise",
+    "wave",
+    "lower",
+    "idle"
+  ],
+  "materials": {
+    "eyes": "head-weighted black eyes and highlights",
+    "skin": "pink skin and darker gills; source has no assigned skin material",
+    "feathers": "original UVs with recovered PlumasColorXolotl",
+    "clothes": "original UVs with RopaXolotlColor",
+    "embedded": true
+  }
+}

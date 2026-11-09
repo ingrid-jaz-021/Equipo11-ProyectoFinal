@@ -74,6 +74,12 @@ public:
     const glm::vec3& SourceMax() const{return sourceMax;}
     const glm::vec3& DockMin() const{return dockMin;}
     const glm::vec3& DockMax() const{return dockMax;}
+    void SetMoonLighting(const glm::vec3& toMoon,const glm::vec3& ambient,const glm::vec3& diffuse)
+    {
+        shader.Use();glUniform3fv(shader.Uniform("moonDirection"),1,glm::value_ptr(toMoon));
+        glUniform3fv(shader.Uniform("ambientLight"),1,glm::value_ptr(ambient));
+        glUniform3fv(shader.Uniform("diffuseLight"),1,glm::value_ptr(diffuse));
+    }
     void Draw(const glm::mat4& view,const glm::mat4& projection,const glm::vec3& eye,double seconds) const
     {
         if(!TransformedBoundsVisible(ExtractFrustum(projection*view),glm::vec3(-.5f,0,-.5f),glm::vec3(.5f,0,.5f),model))

@@ -11,7 +11,7 @@ public:
     void ConfigureNpc(Model& model,const Model& bread,const Model* environment,const glm::vec3& origin,float scale)
     {
         rig=model.Animator();if(!rig)throw std::runtime_error("NPC sin armadura.");Attach(rig);SetFrozen(true);
-        clips={rig->ClipIndex("Idle"),rig->ClipIndex("ReachPocket"),rig->ClipIndex("Appear"),
+        clips={rig->ClipIndex("Idle"),rig->ClipIndex("ReachBasket"),rig->ClipIndex("Appear"),
             rig->ClipIndex("RaiseBread"),rig->ClipIndex("Eat"),rig->ClipIndex("ReturnHand")};
         unit=glm::length(rig->JointPosition("NpcScaleTop")-rig->JointPosition("NpcScaleBottom"));
         anchor=rig->JointPosition("NpcSeatAnchor");
@@ -70,6 +70,15 @@ public:
         matrix=glm::scale(matrix,glm::vec3(height*.12f/breadDiameter*BreadAmount()));
         return glm::translate(matrix,-breadAnchor);
     }
+    glm::mat4 BasketMatrix() const
+    {
+        return glm::scale(glm::translate(WorldMatrix(),glm::vec3(-.26f,.485f,.030f)*unit),glm::vec3(unit*.14f));
+    }
+    glm::vec3 DialogueApproach(float scale) const
+    {
+        const glm::vec3 front(std::sin(yaw),0,std::cos(yaw)),right(std::cos(yaw),0,-std::sin(yaw));
+        return position+(front*3.0f-right*2.0f)*scale;
+    }
     glm::vec3 ViewTarget() const{return seat+glm::vec3(0,height*.20f,0);}
     glm::vec3 ViewEye() const
     {
@@ -80,12 +89,23 @@ public:
     {
         for(const char* joint:{"NpcForearm.R","NpcShin.R","NpcHand.R"})
             if(!rig->HasDeformingJoint(joint))throw std::runtime_error("NPC sin pesos articulados suficientes.");
+        if(std::abs(BasketMatrix()[3].y-seat.y)>.001f)throw std::runtime_error("La canasta no esta apoyada en la banca.");
         for(int fps:{30,60,144})
         {
             ResetCycle();std::array<bool,4> visited{};float previous=1;
             for(int f=0;f<fps*23;++f)
             {
                 UpdateNpc(1.0/fps);visited[static_cast<int>(state)]=true;
+                const float wrist=rig->JointFlexDegrees("NpcForearm.R","NpcHand.R","NpcHandTip.R");
+                const float elbow=rig->JointFlexDegrees("NpcUpperArm.R","NpcForearm.R","NpcHand.R");
+                if(!std::isfinite(wrist)||wrist>31||elbow<17||elbow>133)throw std::runtime_error("Codo o muneca del NPC fuera de limites anatomicos.");
+                if(state==State::Appear)
+                {
+                    const auto rim=BasketMatrix()*glm::vec4(0,.645f,0,1);
+                    const auto grip=GripMatrix()[3];
+                    if(glm::length(glm::vec2(grip.x-rim.x,grip.z-rim.z))>height*.11f||std::abs(grip.y-rim.y)>height*.1f)
+                        throw std::runtime_error("El NPC toma el pan lejos de la canasta.");
+                }
                 if(state==State::Eating)
                 {
                     const float amount=BreadAmount();if(amount>previous+.0001f)throw std::runtime_error("El pan crece durante la comida.");previous=amount;
@@ -98,7 +118,7 @@ public:
             for(bool value:visited)if(!value)throw std::runtime_error("Falta un estado del NPC.");
             if(cycles!=2)throw std::runtime_error("El ciclo del NPC depende de los FPS.");
         }
-        ResetCycle();std::cout<<"NPC OK: cuatro estados, seis clips, pan anclado/decreciente y dos ciclos a 30/60/144 FPS."<<std::endl;
+        ResetCycle();std::cout<<"NPC OK: canasta sobre banca, toma del pan, muneca <=30 grados, cuatro estados y dos ciclos a 30/60/144 FPS."<<std::endl;
     }
 private:
     SkeletalAnimator* rig=nullptr;State state=State::Idle;double time=0;unsigned cycles=0;

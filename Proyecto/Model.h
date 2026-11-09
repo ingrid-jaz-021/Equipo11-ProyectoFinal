@@ -89,6 +89,11 @@ public:
     const glm::vec3& GetMinBounds() const { return minBounds; }
     const glm::vec3& GetMaxBounds() const { return maxBounds; }
     SkeletalAnimator* Animator() { return skeleton.get(); }
+    size_t EmbeddedTextureCount() const{return embeddedTextureCount;}
+    struct DoorBox{glm::vec3 min,max;};
+    struct DoorOpening{glm::vec3 min,max;int normalAxis;};
+    const std::vector<DoorOpening>& DoorOpenings() const{return doorOpenings;}
+    const std::vector<DoorBox>& DoorBoxes() const{return doorBoxes;}
     struct BenchSeat{glm::vec3 anchor;float yaw;float floor;};
     const std::vector<BenchSeat>& BenchSeats() const{return benchSeats;}
     void ValidateLayout() const
@@ -105,6 +110,11 @@ public:
             throw std::runtime_error("La fuente no tiene escala independiente o invade los pilares.");
         std::cout<<"Proporciones OK: kiosko x"<<MovementSettings::KioskScale<<", "<<benchCount<<" bancas x"<<MovementSettings::BenchScale<<", respaldo maximo "<<benchMaxHeight<<"."<<std::endl;
         std::cout<<"Fuente independiente x"<<MovementSettings::FountainScale<<", ancho "<<fountainHi.x-fountainLo.x<<"; kiosko sin cambios."<<std::endl;
+        glm::vec3 parkLo,parkHi;
+        if(!GetMaterialBounds("Material.006",parkLo,parkHi))throw std::runtime_error("Falta piso interior.");
+        for(const auto& b:doorBoxes)
+            if(b.min.x<parkLo.x||b.max.x>parkHi.x||b.min.z<parkLo.z||b.max.z>parkHi.z||std::abs(b.min.y-parkHi.y)>.01f)
+                throw std::runtime_error("Un arco no queda estrictamente dentro y al ras del piso del parque.");
         if(dockTriangles<8||dockUvSpan.x<20||dockUvSpan.y<10)throw std::runtime_error("El muelle no tiene geometria/UV repetidas correctas.");
         std::cout<<"Muelle OK: "<<dockTriangles<<" triangulos alineados; UV repetidas "<<dockUvSpan.x<<" x "<<dockUvSpan.y<<"."<<std::endl;
     }
@@ -161,6 +171,11 @@ private:
     float floorLevel=2.005836f,kioskRawHeight=1,fountainRawWidth=1,benchMaxHeight=0;
     size_t benchCount=0;
     std::vector<BenchSeat> benchSeats;
+    std::vector<DoorBox> doorBoxes;
+    std::vector<DoorOpening> doorOpenings;
+    size_t embeddedTextureCount=0;
+    glm::vec3 plazaCenter=glm::vec3(0);
+    GroundSurface doorGround;
     size_t dockTriangles=0;glm::vec2 dockUvSpan=glm::vec2(0);
     glm::vec3 minBounds = glm::vec3((std::numeric_limits<float>::max)());
     glm::vec3 maxBounds = glm::vec3((std::numeric_limits<float>::lowest)());
@@ -236,6 +251,18 @@ private:
             }
         }
         if(!found||!foundFountain)throw std::runtime_error("No se pudo separar el kiosko y su fuente del entorno.");
+        plazaCenter=(lo+hi)*.5f;
+        for(unsigned m=0;m<scene->mNumMeshes;++m)
+        {
+            const auto* mesh=scene->mMeshes[m];aiString name;scene->mMaterials[mesh->mMaterialIndex]->Get(AI_MATKEY_NAME,name);
+            const std::string n=name.C_Str();
+            if(n!="Material.006"&&n!="Material.013"&&n!="Material.016"&&n!="Material.017"&&n!="Material.018"&&n!="Material.019"&&n!="Material.020")continue;
+            for(unsigned f=0;f<mesh->mNumFaces;++f)if(mesh->mFaces[f].mNumIndices==3)
+            {
+                glm::vec3 p[3];for(int i=0;i<3;++i){const auto& v=mesh->mVertices[mesh->mFaces[f].mIndices[i]];p[i]={v.x,v.y,v.z};}
+                doorGround.Add(p[0],p[1],p[2]);
+            }
+        }
         const glm::vec3 anchor((lo.x+hi.x)*.5f,floorLevel,(lo.z+hi.z)*.5f);
         kioskTransform=glm::translate(glm::mat4(1),anchor);
         kioskTransform=glm::scale(kioskTransform,glm::vec3(MovementSettings::KioskScale));
@@ -386,14 +413,19 @@ private:
             if (imported->Get(AI_MATKEY_COLOR_EMISSIVE, color) == AI_SUCCESS)
                 material.emissiveColor = glm::vec3(color.r, color.g, color.b);
             imported->Get(AI_MATKEY_OPACITY, material.opacity);
-            if (imported->GetTextureCount(aiTextureType_DIFFUSE) > 0)
+            aiColor4D baseColor;
+            const bool hasBaseColor=imported->Get("$clr.base",0,0,baseColor)==AI_SUCCESS||
+                imported->Get("$mat.gltf.pbrMetallicRoughness.baseColorFactor",0,0,baseColor)==AI_SUCCESS;
+            if(hasBaseColor){material.diffuseColor={baseColor.r,baseColor.g,baseColor.b};material.opacity*=baseColor.a;}
+            const auto albedoType=imported->GetTextureCount(aiTextureType_DIFFUSE)>0?aiTextureType_DIFFUSE:aiTextureType_UNKNOWN;
+            if (imported->GetTextureCount(albedoType) > 0)
             {
                 aiString texturePath;
-                if (imported->GetTexture(aiTextureType_DIFFUSE, 0, &texturePath) == AI_SUCCESS)
+                if (imported->GetTexture(albedoType, 0, &texturePath) == AI_SUCCESS)
                 {
-                    material.diffuseTexture = LoadTexture(texturePath.C_Str());
+                    material.diffuseTexture = LoadTexture(texturePath.C_Str(),scene);
                     // Blender omite Kd cuando el color procede de una imagen.
-                    material.diffuseColor = glm::vec3(1.0f);
+                    if(!hasBaseColor)material.diffuseColor = glm::vec3(1.0f);
                 }
             }
         }
@@ -402,12 +434,69 @@ private:
             for (auto& vertex : vertices) vertex.TexCoords = ProjectFloorUV(vertex.Position, vertex.Normal, tile);
         if(options.ground&&materialName=="tarima_madera.001")AddDock(vertices,indices,material,materialName);
         else if(options.ground&&materialName=="LoD_0SG")AddBenches(vertices,indices,material,materialName);
+        else if(options.ground&&materialName=="Stuco_Wall")AddDoors(vertices,indices,material,materialName);
         else
         {
             const bool kiosk=options.ground&&materialName=="Material.014";
             const bool fountain=options.ground&&(materialName=="Material.004"||materialName=="Material.005"||materialName=="Material.007");
             AddPart(vertices,indices,skin,material,materialName,kiosk?kioskTransform:fountain?fountainTransform:glm::mat4(1));
         }
+    }
+    void AddDoors(const std::vector<Vertex>& vertices,const std::vector<GLuint>& indices,const MeshMaterial& material,const std::string& name)
+    {
+        // Cuatro portadas cardinales; el adorno central del kiosko se conserva.
+        std::array<std::vector<GLuint>,5> groups;
+        for(size_t i=0;i+2<indices.size();i+=3)
+        {
+            const auto p=(vertices[indices[i]].Position+vertices[indices[i+1]].Position+vertices[indices[i+2]].Position)/3.0f;
+            const auto d=p-plazaCenter;int group=4;
+            if(std::max(std::abs(d.x),std::abs(d.z))>30)
+                group=std::abs(d.x)>std::abs(d.z)?(d.x>0?0:1):(d.z>0?2:3);
+            groups[group].insert(groups[group].end(),indices.begin()+i,indices.begin()+i+3);
+        }
+        for(size_t group=0;group<groups.size();++group)
+        {
+            if(groups[group].empty()){if(group<4)throw std::runtime_error("Falta una puerta blanca.");continue;}
+            std::vector<Vertex> local;std::vector<GLuint> localIndices;
+            std::unordered_map<GLuint,GLuint> remap;
+            glm::vec3 lo((std::numeric_limits<float>::max)()),hi((std::numeric_limits<float>::lowest)());
+            for(GLuint id:groups[group])
+            {
+                auto found=remap.find(id);
+                if(found==remap.end())
+                {const auto index=static_cast<GLuint>(local.size());remap.emplace(id,index);local.push_back(vertices[id]);localIndices.push_back(index);
+                 lo=glm::min(lo,vertices[id].Position);hi=glm::max(hi,vertices[id].Position);}
+                else localIndices.push_back(found->second);
+            }
+            glm::vec3 offset(0);
+            if(group<4)
+            {
+                // Dentro del piso del parque: tres unidades hacia el kiosko.
+                offset=group==0?glm::vec3(-3,0,0):group==1?glm::vec3(3,0,0):group==2?glm::vec3(0,0,-3):glm::vec3(0,0,3);
+                const auto center=(lo+hi)*.5f+offset;float support=floorLevel;
+                if(!doorGround.Sample(center.x,center.z,floorLevel,support))throw std::runtime_error("Puerta sin piso de apoyo.");
+                offset.y=support-lo.y;
+                const int span=group<2?2:0,normalAxis=group<2?0:2;
+                const float middle=(lo[span]+hi[span])*.5f;
+                glm::vec3 pillarLo[2]={glm::vec3((std::numeric_limits<float>::max)()),glm::vec3((std::numeric_limits<float>::max)())};
+                glm::vec3 pillarHi[2]={glm::vec3((std::numeric_limits<float>::lowest)()),glm::vec3((std::numeric_limits<float>::lowest)())};
+                // Solo el tramo vertical inferior. La boveda/lintel no cierra el hueco.
+                for(const auto& v:local)if(v.Position.y<=lo.y+8.0f)
+                {const int side=v.Position[span]<middle?0:1;pillarLo[side]=glm::min(pillarLo[side],v.Position);pillarHi[side]=glm::max(pillarHi[side],v.Position);}
+                for(int side=0;side<2;++side)
+                {
+                    pillarLo[side].y=lo.y;pillarHi[side].y=lo.y+8.0f;
+                    if(pillarHi[side][span]<=pillarLo[side][span])throw std::runtime_error("Pilar vacio.");
+                    doorBoxes.push_back({pillarLo[side]+offset,pillarHi[side]+offset});
+                }
+                auto openingLo=lo+offset,openingHi=hi+offset;
+                openingLo[span]=pillarHi[0][span]+offset[span];openingHi[span]=pillarLo[1][span]+offset[span];openingHi.y=openingLo.y+8.0f;
+                doorOpenings.push_back({openingLo,openingHi,normalAxis});
+                std::cout<<"Puerta "<<group+1<<": traslacion "<<offset.x<<", "<<offset.y<<", "<<offset.z<<"; dos AABB de pilares, centro libre."<<std::endl;
+            }
+            AddPart(local,localIndices,{},material,name,glm::translate(glm::mat4(1),offset));
+        }
+        if(doorBoxes.size()!=8||doorOpenings.size()!=4)throw std::runtime_error("Se requieren ocho pilares y cuatro pasos libres.");
     }
     void AddDock(const std::vector<Vertex>& vertices,const std::vector<GLuint>& indices,const MeshMaterial& original,const std::string& name)
     {
@@ -433,9 +522,27 @@ private:
         MeshMaterial wood=original;wood.diffuseTexture=LoadTexture("../../images/MuelleMadera.png");wood.diffuseColor=glm::vec3(1);
         dockUvSpan=glm::max(dockUvSpan,uvHi-uvLo);AddPart(east,eastIndices,{},wood,name,glm::mat4(1));
     }
-    GLuint LoadTexture(std::string relativePath)
+    GLuint LoadTexture(std::string relativePath,const aiScene* scene=nullptr)
     {
         std::replace(relativePath.begin(), relativePath.end(), '\\', '/');
+        if(!relativePath.empty()&&relativePath[0]=='*')
+        {
+            const auto existing=texturesLoaded.find(relativePath);if(existing!=texturesLoaded.end())return existing->second;
+            size_t consumed=0;unsigned long index=0;
+            try{index=std::stoul(relativePath.substr(1),&consumed);}catch(...){throw std::runtime_error("Indice de textura incrustada invalido.");}
+            if(!scene||consumed!=relativePath.size()-1||index>=scene->mNumTextures)throw std::runtime_error("Falta imagen incrustada: "+relativePath);
+            const auto* image=scene->mTextures[index];GLuint texture=0;
+            if(image->mHeight==0)texture=DecodeRgbaTexture(reinterpret_cast<const unsigned char*>(image->pcData),image->mWidth);
+            else
+            {
+                if(image->mWidth>static_cast<unsigned>((std::numeric_limits<int>::max)())||image->mHeight>static_cast<unsigned>((std::numeric_limits<int>::max)()))throw std::runtime_error("Imagen incrustada demasiado grande.");
+                std::vector<unsigned char> rgba(static_cast<size_t>(image->mWidth)*image->mHeight*4);
+                for(size_t i=0;i<rgba.size()/4;++i){const auto& p=image->pcData[i];rgba[i*4]=p.r;rgba[i*4+1]=p.g;rgba[i*4+2]=p.b;rgba[i*4+3]=p.a;}
+                texture=UploadRgbaTexture(rgba.data(),static_cast<int>(image->mWidth),static_cast<int>(image->mHeight));
+            }
+            texturesLoaded.emplace(relativePath,texture);++embeddedTextureCount;
+            std::cout<<"Textura incrustada "<<relativePath<<" cargada en GPU."<<std::endl;return texture;
+        }
         const bool absolute = (!relativePath.empty() && relativePath[0] == '/') ||
             (relativePath.size() > 1 && relativePath[1] == ':');
         const std::string filename = absolute ? relativePath : directory + '/' + relativePath;

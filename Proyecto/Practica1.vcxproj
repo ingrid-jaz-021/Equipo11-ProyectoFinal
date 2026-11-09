@@ -34,6 +34,7 @@
     <ClInclude Include="Frustum.h" />
     <ClInclude Include="RenderMetrics.h" />
     <ClInclude Include="KioskNpc.h" />
+    <ClInclude Include="NpcDialogue.h" />
     <ClInclude Include="DockSurface.h" />
     <ClInclude Include="MovementSettings.h" />
     <ClInclude Include="Camera.h" />
@@ -49,15 +50,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Models\NinaRig\NinaRig.fbx" />
-    <None Include="Models\NinaRig\NinaRig.glb" />
-    <None Include="Models\NinaRig\NinaRig.blend" />
     <None Include="Models\NinaRig\arm-limits.txt" />
-    <None Include="tools\build_nina_rig.py" />
-    <None Include="tools\mocap_retarget.py" />
-    <None Include="tools\build_xolo_rig.py" />
     <None Include="Models\XoloRig\XoloRig.fbx" />
-    <None Include="Models\XoloRig\XoloRig.glb" />
-    <None Include="Models\XoloRig\XoloRig.blend" />
     <None Include="Models\XoloRig\textures\xolo_skin.png" />
     <None Include="Models\XoloRig\textures\xolo_features.jpg" />
     <None Include="images\Arbol_RGBA.png" />
@@ -78,17 +72,17 @@
     <None Include="Models\Farola\Farola.obj" />
     <None Include="Models\barquito.obj" />
     <None Include="Models\barquito.mtl" />
+    <None Include="Models\canasta.obj" />
+    <None Include="Models\canasta.mtl" />
+    <None Include="images\IvanovichDialogo.png" />
+    <None Include="Shader\dialogue.vs" />
+    <None Include="Shader\dialogue.frag" />
     <None Include="Models\KioskNpcRig\KioskNpcRig.fbx" />
-    <None Include="Models\KioskNpcRig\KioskNpcRig.blend" />
-    <None Include="Models\Persona Kiosko\PersonaZoc.obj" />
     <None Include="Models\Pan de muerto\PanMuerto.obj" />
     <None Include="Models\Pan de muerto\PanMuerto.mtl" />
     <None Include="Models\Pan de muerto\Texturapan.jpg" />
     <None Include="images\MuelleMadera.png" />
-    <None Include="tools\build_kiosk_npc.py" />
-    <None Include="tools\build_dock_texture.py" />
     <None Include="Models\Farola\Farola.mtl" />
-    <None Include="Models\niña zocalo.mtl" />
     <None Include="Shader\modelLoading.frag" />
     <None Include="Shader\modelLoading.vs" />
     <None Include="Shader\character.vs" />
@@ -236,4 +230,18 @@ copy /Y "$(ProjectDir)assimp-vc140-mt.dll" "$(OutDir)"</Command>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+  <ItemGroup>
+    <ClInclude Include="AxoloteNpc.h" />
+    <ClInclude Include="SolidObstacles.h" />
+    <None Include="Models\AxoloteEntrada\AxoloteEntrada.fbx" />
+    <None Include="images\AxoloteDialogo0.png" />
+    <None Include="images\AxoloteDialogo1.png" />
+    <None Include="images\AxoloteDialogo2.png" />
+    <None Include="images\AxoloteDialogo3.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="MoonSky.h" />
+    <None Include="Shader\moon.vs" />
+    <None Include="Shader\moon.frag" />
+  </ItemGroup>
 </Project>

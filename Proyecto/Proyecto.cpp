@@ -32,6 +32,10 @@
 #include "CompanionController.h"
 #include "BoatNavigation.h"
 #include "KioskNpc.h"
+#include "NpcDialogue.h"
+#include "AxoloteNpc.h"
+#include "SolidObstacles.h"
+#include "MoonSky.h"
 
 namespace
 {
@@ -46,6 +50,8 @@ FollowCamera followCamera;
 enum class CameraMode { Free, ThirdPerson };
 CameraMode cameraMode = CameraMode::ThirdPerson;
 BoatNavigation* activeBoat=nullptr; // Propiedad de RunScene; callbacks solo durante su vida.
+AxoloteNpc* activeAxolote=nullptr;
+SolidObstacles* activeDoors=nullptr;
 bool vsyncEnabled=false;
 bool firstMouse = true;
 double lastX = 0.0, lastY = 0.0;
@@ -65,6 +71,7 @@ void UpdateFollowCamera(float dt,bool snap=false)
 void ResetScene()
 {
     if(activeBoat)activeBoat->Reset();
+    if(activeAxolote)activeAxolote->ResetInteraction();
     cameraMode = CameraMode::ThirdPerson;
     player.SetFrozen(false);
     player.Reset();
@@ -122,6 +129,9 @@ void KeyCallback(GLFWwindow* window, int key, int, int action, int)
         firstMouse = true;
         UpdateWindowTitle(window);
     }
+    // G: avanzar los tres mensajes del axolote. Sin autorepeticion ni conflicto con E/F.
+    if(key==GLFW_KEY_G&&cameraMode==CameraMode::ThirdPerson&&activeAxolote&&(!activeBoat||!activeBoat->IsNavigating()))
+        activeAxolote->Interact(player.position);
     // E en tercera persona: subir/bajar. En camara libre sigue siendo ascenso.
     if(key==GLFW_KEY_E&&cameraMode==CameraMode::ThirdPerson&&activeBoat)
     {
@@ -173,9 +183,11 @@ void SimulateFrame(glm::vec2 input,bool sprint,float vertical,float dt,const Gro
         if(sailing)activeBoat->PlacePassengers(player,companion);
         else
         {
+            if(activeDoors&&cameraMode==CameraMode::ThirdPerson)activeDoors->Resolve(player,before);
             if(activeBoat&&cameraMode==CameraMode::ThirdPerson)activeBoat->GuardWalking(player,before);
             if(ground&&cameraMode==CameraMode::ThirdPerson)player.ConformToGround(*ground,SOURCE_SPAWN,ENVIRONMENT_SCALE,step);
             companion.UpdateCompanion(player,ground,SOURCE_SPAWN,ENVIRONMENT_SCALE,step,false);
+            if(activeDoors)activeDoors->Resolve(companion,petBefore);
             if(activeBoat)activeBoat->GuardWalking(companion,petBefore);
         }
     }
@@ -563,13 +575,11 @@ void SaveFramebuffer(const std::string& path, int width, int height)
     std::fclose(file);
     if (!success) throw std::runtime_error("Captura incompleta.");
 }
-void SetLighting(const Shader& shader)
+void SetLighting(const Shader& shader,const MoonSky& moon)
 {
     shader.Use();
     glUniform1i(shader.Uniform("texture_diffuse1"), 0);
-    glUniform3f(shader.Uniform("lightDirection"), -0.2f, -1.0f, -0.3f);
-    glUniform3f(shader.Uniform("ambientLight"), 0.38f, 0.40f, 0.45f);
-    glUniform3f(shader.Uniform("diffuseLight"), 0.26f, 0.25f, 0.24f);
+    moon.UploadLighting(shader);
 }
 void SetValidationCamera(const glm::vec3& eye, const glm::vec3& target)
 {
@@ -605,9 +615,11 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     Shader characterShader("Shader/character.vs", "Shader/modelLoading.frag");
     Shader lampShader("Shader/modelLoading_instanced.vs","Shader/modelLoading.frag");
     Shader skyboxShader("Shader/SkyBox.vs", "Shader/SkyBox.frag");
-    SetLighting(environmentShader);
-    SetLighting(characterShader);
-    SetLighting(lampShader);
+    MoonSky moon(ENVIRONMENT_SCALE);
+    SetLighting(environmentShader,moon);
+    SetLighting(characterShader,moon);
+    SetLighting(lampShader,moon);
+    if(validate)moon.Validate(environmentShader,characterShader,lampShader);
     const auto keepLoading = [window]() {
         glfwPollEvents();
         glClearColor(0.05f, 0.05f, 0.08f, 1.0f);
@@ -629,8 +641,13 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     companion.Configure(dog.GetMinBounds(),dog.GetMaxBounds(),MovementSettings::CompanionHeight*ENVIRONMENT_SCALE);
     companion.ResetBeside(player,ENVIRONMENT_SCALE);
     Model npcModel("Models/KioskNpcRig/KioskNpcRig.fbx",keepLoading,{nullptr,true,{},false});
+    Model axoloteModel("Models/AxoloteEntrada/AxoloteEntrada.fbx",keepLoading,{nullptr,true,{},false});
     Model breadModel("Models/Pan de muerto/PanMuerto.obj",keepLoading);
+    Model basketModel("Models/canasta.obj",keepLoading);
     Model boatModel("Models/barquito.obj",keepLoading);
+    const auto skeletalClips=girl.Animator()->ClipCount()+dog.Animator()->ClipCount()+npcModel.Animator()->ClipCount()+axoloteModel.Animator()->ClipCount();
+    std::cout<<"Inventario de animaciones: "<<skeletalClips+3<<" tipos = "<<skeletalClips<<" clips esqueleticos + pan que disminuye + agua animada + flecha oscilante."<<std::endl;
+    if(validate&&skeletalClips!=14)throw std::runtime_error("El inventario de clips activos cambio; actualizar ANIMACIONES.md.");
     if(validate&&characterOnly)
     {
         GroundSurface testGround;
@@ -654,8 +671,13 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             keepLoading, ModelOptions{ &ground, false, {"TapeteAserrin1.002","tarima_madera.001"} });
         if (validate) { environment->ValidateLayout(); ValidateSceneGrass(ground); ValidatePasilloGround(ground); }
     }
+    SolidObstacles doors;
+    if(environment){doors.Build(*environment,SOURCE_SPAWN,ENVIRONMENT_SCALE);if(validate)doors.Validate(ground,SOURCE_SPAWN,ENVIRONMENT_SCALE);activeDoors=&doors;}
+    AxoloteNpc axolote;axolote.ConfigureNpc(axoloteModel,environment.get(),ground,SOURCE_SPAWN,ENVIRONMENT_SCALE);
+    activeAxolote=&axolote;if(validate)axolote.Validate();
     KioskNpc npc;npc.ConfigureNpc(npcModel,breadModel,environment.get(),SOURCE_SPAWN,ENVIRONMENT_SCALE);
     if(validate)npc.Validate();
+    NpcDialogue dialogue;
     Model lamp("Models/Farola/Farola.obj", keepLoading,{nullptr,false,{"Material.001"}});
     ZocaloLighting plazaLights;
     plazaLights.Build(lamp, environment.get(), ground, SOURCE_SPAWN, ENVIRONMENT_SCALE);
@@ -679,6 +701,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         backdrop=std::make_unique<ZocaloBackdrop>(*billboards,*environment,ground,SOURCE_SPAWN,ENVIRONMENT_SCALE);
         if(validate) billboards->ValidateAlpha();
         water=std::make_unique<WaterSurface>(*environment,SOURCE_SPAWN,ENVIRONMENT_SCALE);
+        water->SetMoonLighting(moon.ToMoon(),moon.Ambient(),moon.Diffuse());
         lakeFence=std::make_unique<LakeFence>(*billboards,*water,SOURCE_SPAWN,ENVIRONMENT_SCALE);
         navigation=std::make_unique<BoatNavigation>(BoatNavigation::Area{water->SourceMin(),water->SourceMax(),water->DockMin(),water->DockMax()},
             ground,SOURCE_SPAWN,ENVIRONMENT_SCALE);
@@ -712,6 +735,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     double previous = glfwGetTime();
     FrameProfiler profiler(profiling);
     int frame = 0;
+    unsigned dialogueNearSamples=0,dialogueFarSamples=0,axoloteDialogueSamples=0;
     glm::vec3 pausedBoat(0);std::vector<glm::mat4> pausedHuman,pausedDog;
     while (!glfwWindowShouldClose(window))
     {
@@ -778,6 +802,9 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         else DoMovement(window,dt,environment?&ground:nullptr);
         UpdateFollowCamera(dt);
         npc.UpdateNpc(dt);
+        axolote.UpdateGreeting(dt);
+        axolote.UpdateProximity(player.position,!navigation||!navigation->IsNavigating());
+        bool dialogueApproachTest=false;glm::vec3 savedDialoguePosition(0);
         if (validate && environment)
         {
             if (frame == 130)
@@ -884,8 +911,32 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             {
                 const double sample=frame==npcStart?1.0:frame==npcStart+5?4.4:frame==npcStart+10?7.7:frame==npcStart+15?9.9:11.2;
                 npc.ResetCycle();npc.UpdateNpc(sample);SetValidationCamera(npc.ViewEye(),npc.ViewTarget());
+                if(frame==npcStart+5||frame==npcStart+10)
+                {
+                    savedDialoguePosition=player.position;player.position=npc.DialogueApproach(ENVIRONMENT_SCALE);
+                    dialogueApproachTest=true;
+                }
             }
         }
+        const int axoloteStart=environment?805:425;
+        const int axoloteSample=frame-axoloteStart;
+        const bool captureAxolote=validate&&axoloteSample>=0&&axoloteSample<=25&&axoloteSample%5==0;
+        bool restoreAxolotePosition=false;glm::vec3 savedAxolotePosition(0);
+        if(captureAxolote)
+        {
+            savedAxolotePosition=player.position;restoreAxolotePosition=true;axolote.ResetInteraction();
+            player.position=axoloteSample==25?axolote.position+glm::vec3(80,0,0):axolote.Approach();
+            axolote.UpdateProximity(player.position);
+            cameraMode=CameraMode::ThirdPerson;
+            for(int press=0;press<axoloteSample/5&&axoloteSample<25;++press)KeyCallback(window,GLFW_KEY_G,0,GLFW_PRESS,0);
+            if((axoloteSample<20&&(!axolote.DialogueVisible()||axolote.MessageIndex()!=axoloteSample/5-1))||
+                (axoloteSample>=20&&axolote.DialogueVisible()))throw std::runtime_error("G o salida del radio no actualiza el dialogo del axolote.");
+            if(axolote.DialogueVisible())++axoloteDialogueSamples;
+            axolote.UpdateGreeting(axoloteSample==0?.2:axoloteSample==5?2.1:axoloteSample==10?3.1:axoloteSample==15?4.1:axoloteSample==20?6.0:7.0);
+            SetValidationCamera(axolote.ViewEye(),axolote.ViewTarget());
+        }
+        const int moonFrame=environment?800:420;
+        if(validate&&frame==moonFrame)SetValidationCamera(moon.Focus()+glm::vec3(0,20*ENVIRONMENT_SCALE,0),moon.Position());
         int width, height;
         glfwGetFramebufferSize(window, &width, &height);
         if (width <= 0 || height <= 0) { glfwWaitEventsTimeout(0.05); continue; }
@@ -897,7 +948,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         const glm::mat4 view = cameraMode == CameraMode::Free ? freeCamera.GetViewMatrix() : followCamera.View();
         const float fov = cameraMode == CameraMode::Free ? freeCamera.GetZoom() : 45.0f;
         const glm::mat4 projection = glm::perspective(glm::radians(fov), static_cast<float>(width) / height,
-            0.02f * ENVIRONMENT_SCALE, std::max(10000.0f, sceneDiagonal * 1.5f + glm::length(eye)));
+            0.02f * ENVIRONMENT_SCALE, std::max(moon.FarPlane(eye),std::max(10000.0f,sceneDiagonal*1.5f+glm::length(eye))));
         if (environment)
         {
             glm::mat4 model = glm::translate(glm::mat4(1), ENVIRONMENT_TRANSLATION);
@@ -908,10 +959,13 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             DrawObject(boatModel,environmentShader,navigation->ModelMatrix(),view,projection);
             navigation->DrawMarker(environmentShader,view,projection,now);
         }
+        DrawObject(axoloteModel,characterShader,axolote.ModelMatrix(),view,projection,&axolote);
+        DrawObject(basketModel,environmentShader,npc.BasketMatrix(),view,projection);
         DrawObject(npcModel,characterShader,npc.WorldMatrix(),view,projection,&npc);
         if(npc.BreadVisible())DrawObject(breadModel,environmentShader,npc.BreadMatrix(),view,projection);
         DrawObject(girl, characterShader, player.ModelMatrix(), view, projection, &player);
         DrawObject(dog,characterShader,companion.ModelMatrix(),view,projection,&companion);
+        moon.Draw(view,projection,eye);
         if(water)water->Draw(view,projection,eye,now);
         glDepthFunc(GL_LEQUAL);
         glDepthMask(GL_FALSE);
@@ -924,13 +978,21 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         glDepthFunc(GL_LESS);
         // Cielo y opacos primero; planos RGBA al final, ordenados de lejos a cerca.
         if(billboards) billboards->Draw(view,projection);
+        const bool showDialogue=NpcDialogue::IsNearby(player.position,npc.position,ENVIRONMENT_SCALE);
+        dialogue.Draw(showDialogue&&!axolote.DialogueVisible(),width,height);
+        axolote.DrawDialogue(width,height);
         profiler.EndRender();
         const int actionFrame=environment?340:140;
         const bool captureAction=frame==actionFrame||frame==actionFrame+55||frame==actionFrame+96||frame==actionFrame+132||frame==actionFrame+180||frame==actionFrame+255;
         const bool captureBoat=environment&&(frame==610||frame==640||frame==670||frame==690||frame==720||frame==750);
         const int npcStart=environment?780:400;
         const bool captureNpc=frame==npcStart||frame==npcStart+5||frame==npcStart+10||frame==npcStart+15||frame==npcStart+17;
-        if (validate && (captureNpc || captureBoat || captureAction || frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 305 || frame == 310 || frame == 315 || frame == 320 || frame == 325 || frame == 330 || frame == 335))
+        if(validate&&captureNpc)
+        {
+            if(showDialogue!=dialogueApproachTest)throw std::runtime_error("El dialogo no aparece/desaparece por proximidad real de la nina.");
+            if(showDialogue)++dialogueNearSamples;else ++dialogueFarSamples;
+        }
+        if (validate && (frame==moonFrame || captureAxolote || captureNpc || captureBoat || captureAction || frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 305 || frame == 310 || frame == 315 || frame == 320 || frame == 325 || frame == 330 || frame == 335))
         {
             std::vector<float> depth(static_cast<size_t>(width) * height);
             glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, depth.data());
@@ -938,12 +1000,18 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
                 throw std::runtime_error("La camara no ve geometria.");
             if (!capture.empty()) SaveFramebuffer(capture + "-" + std::to_string(frame) + ".tga", width, height);
         }
-        if (frame == 0 || validate) CheckOpenGL("personaje, animacion, camaras y skybox");
+        if(dialogueApproachTest)player.position=savedDialoguePosition;
+        if(restoreAxolotePosition)player.position=savedAxolotePosition;
+        if (frame == 0 || validate) CheckOpenGL("personaje, animacion, camaras, dialogo, Luna y skybox");
         glfwSwapBuffers(window);
-        if (validate && ++frame >= (environment ? 800 : 420))
+        if (validate && ++frame >= (environment ? 840 : 460))
         {
             if(companion.IsSpecial()||glm::length(companion.position-companion.FollowTarget(player,ENVIRONMENT_SCALE))>.4f*ENVIRONMENT_SCALE)
                 throw std::runtime_error("F no devolvio el xolo a su posicion de seguimiento.");
+            if(dialogueNearSamples<2||dialogueFarSamples<2)throw std::runtime_error("No se verificaron entrada y salida del dialogo.");
+            if(axoloteDialogueSamples<4)throw std::runtime_error("Faltan los tres paneles del axolote en pantalla.");
+            std::cout<<"Axolote visual OK: aviso G, mensajes 1/2/3, cierre y salida del trigger."<<std::endl;
+            std::cout<<"Dialogo OK: texto visible al acercarse y oculto al alejarse; UI RGBA sin errores."<<std::endl;
             std::cout << "VALIDACION OK: animacion suave, luces, ambas camaras y " << frame
                 << " frames sin errores OpenGL." << std::endl;
             break;
@@ -951,7 +1019,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         if (!validate) ++frame;
     }
     profiler.Write((capture.empty()?"obj/validation/profile":capture)+"-performance.json");
-    activeBoat=nullptr;
+    activeBoat=nullptr;activeAxolote=nullptr;activeDoors=nullptr;
 }
 }
 
