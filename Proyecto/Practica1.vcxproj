@@ -39,6 +39,7 @@
     <ClInclude Include="MovementSettings.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="ZocaloLighting.h" />
+    <ClInclude Include="LagunaSpotLighting.h" />
     <ClInclude Include="CharacterController.h" />
     <ClInclude Include="CompanionController.h" />
     <ClInclude Include="GroundSurface.h" />
