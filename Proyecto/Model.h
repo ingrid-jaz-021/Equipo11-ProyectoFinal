@@ -125,6 +125,11 @@ public:
         min = found->second.min; max = found->second.max;
         return true;
     }
+    const std::vector<glm::vec3>* GetMaterialPositions(const std::string& name) const
+    {
+        const auto found = materialProfiles.find(name);
+        return found == materialProfiles.end() ? nullptr : &found->second;
+    }
     bool GetMaterialEndBounds(const std::string& name,int axis,float band,glm::vec3& min,glm::vec3& max) const
     {
         glm::vec3 lo,hi;

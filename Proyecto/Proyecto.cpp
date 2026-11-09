@@ -25,6 +25,7 @@
 #include "Texture.h"
 #include "CharacterController.h"
 #include "ZocaloLighting.h"
+#include "LagunaSpotLighting.h"
 #include "TreeVegetation.h"
 #include "ZocaloBackdrop.h"
 #include "WaterSurface.h"
@@ -668,7 +669,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     {
         glfwSetWindowTitle(window, "Cargando EntornoCompleto.obj...");
         environment = std::make_unique<Model>("Models/EntornoCompleto/EntornoCompleto.obj",
-            keepLoading, ModelOptions{ &ground, false, {"TapeteAserrin1.002","tarima_madera.001"} });
+            keepLoading, ModelOptions{ &ground, false, {"TapeteAserrin1.002","tarima_madera.001","Material.025","Material.026"} });
         if (validate) { environment->ValidateLayout(); ValidateSceneGrass(ground); ValidatePasilloGround(ground); }
     }
     SolidObstacles doors;
@@ -688,6 +689,15 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     std::vector<glm::mat4> lampModels;lampModels.reserve(plazaLights.instances.size());
     for(const auto& lamp:plazaLights.instances)lampModels.push_back(lamp.model);
     std::cout << "Zocalo: 12 farolas (8 interiores y 4 exteriores), focos alineados con su cristal." << std::endl;
+    LagunaSpotLighting lagoonLights;
+    if (environment)
+    {
+        lagoonLights.Build(*environment, SOURCE_SPAWN, ENVIRONMENT_SCALE);
+        if (validate) lagoonLights.Validate();
+        lagoonLights.Upload(environmentShader);
+        lagoonLights.Upload(characterShader);
+        lagoonLights.Upload(lampShader);
+    }
     std::unique_ptr<AlphaBillboards> billboards;
     std::unique_ptr<TreeVegetation> vegetation;
     std::unique_ptr<ZocaloBackdrop> backdrop;
