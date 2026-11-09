@@ -1,7 +1,7 @@
 """Normalize the supplied NPC, skin it, and bake seated eating clips for Assimp."""
 import bpy,bmesh,math,json,shutil,traceback,sys
 from pathlib import Path
-from mathutils import Vector,Matrix
+from mathutils import Vector,Matrix,Quaternion
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'Models/KioskNpcRig';OUT.mkdir(parents=True,exist_ok=True)
 sys.path.insert(0,str(ROOT/'tools'))
@@ -10,23 +10,52 @@ from mocap_retarget import eng,set_world,pose_matrix
 def smooth(t):
     t=max(0,min(1,t));return t*t*t*(t*(t*6-15)+10)
 def blend(a,b,t):return Vector(a).lerp(Vector(b),smooth(t))
+def arc(a,b,c,d,t):
+    t=smooth(t);return Vector(a)*(1-t)**3+Vector(b)*(3*(1-t)**2*t)+Vector(c)*(3*(1-t)*t*t)+Vector(d)*t**3
 def orient(rig,name,direction,up=(0,1,0)):
     y=eng(direction).normalized();z=eng(up);z-=y*z.dot(y)
     if z.length<.01:z=eng((0,0,1))-y*eng((0,0,1)).dot(y)
     z.normalize();x=y.cross(z).normalized()
     set_world(rig,name,Matrix((x,y,z)).transposed().to_quaternion())
-def ik(rig,upper,lower,tip,target,hint):
+def ik(rig,upper,lower,target,hint):
     a=rig.data.bones[upper].length;b=rig.data.bones[lower].length
     origin=pose_matrix(rig.pose.bones[upper]).translation
-    delta=eng(target)-origin;distance=max(abs(a-b)+.001,min(a+b-.001,delta.length));d=delta.normalized()
+    delta=eng(target)-origin
+    minimum=math.sqrt(a*a+b*b+2*a*b*math.cos(math.radians(132)))
+    maximum=math.sqrt(a*a+b*b+2*a*b*math.cos(math.radians(18)))
+    distance=max(minimum,min(maximum,delta.length));d=delta.normalized()
     bend=eng(hint);bend-=d*bend.dot(d);bend.normalize()
     along=(a*a-b*b+distance*distance)/(2*distance)
     elbow=origin+d*along+bend*math.sqrt(max(0,a*a-along*along))
     wrist=origin+d*distance
+    plane=d.cross(bend).normalized()*(-1 if upper.endswith('.R') else 1)
     def direct(name,v):
-        m=pose_matrix(rig.pose.bones[name]);current=m.to_3x3()@Vector((0,1,0))
-        set_world(rig,name,current.normalized().rotation_difference(v.normalized())@m.to_quaternion())
+        # Both segments share one stable anatomical elbow plane. This avoids
+        # the roll singularity of independently aiming an opposite rest axis.
+        y=v.normalized();z=(plane-y*plane.dot(y)).normalized();x=y.cross(z).normalized()
+        set_world(rig,name,Matrix((x,y,z)).transposed().to_quaternion())
     direct(upper,elbow-origin);direct(lower,wrist-elbow)
+    return (eng(target)-wrist).length
+
+def natural_hand(rig,lower,hand,grip):
+    fore=pose_matrix(rig.pose.bones[lower]);axis=(fore.to_3x3()@Vector((0,1,0))).normalized()
+    desired=axis.lerp(eng((0,.08,1)),grip).normalized()
+    angle=axis.angle(desired);limit=math.radians(30)
+    if angle>limit:
+        desired=Quaternion((1,0,0),0).slerp(axis.rotation_difference(desired),limit/angle)@axis
+    def neutral():
+        return pose_matrix(rig.pose.bones[lower]).to_3x3()@rig.data.bones[lower].matrix_local.to_3x3().inverted()@rig.data.bones[hand].matrix_local.to_3x3()
+    reference=neutral();q=(reference@Vector((0,1,0))).normalized().rotation_difference(desired)@reference.to_quaternion()
+    palm=q@Vector((0,0,1));up=eng((0,1,0));up-=desired*up.dot(desired)
+    if up.length<.01:up=eng((0,0,1))-desired*eng((0,0,1)).dot(desired)
+    up.normalize();palm-=desired*palm.dot(desired);palm.normalize()
+    roll=math.atan2(desired.dot(palm.cross(up)),palm.dot(up))*grip
+    roll=max(-math.radians(60),min(math.radians(60),roll))
+    # Pronation belongs to the forearm. The wrist receives only the remaining
+    # small roll, instead of rotating the palm 90 degrees at a single pivot.
+    set_world(rig,lower,Quaternion(axis,roll*.75)@fore.to_quaternion())
+    reference=neutral();q=(reference@Vector((0,1,0))).normalized().rotation_difference(desired)@reference.to_quaternion()
+    set_world(rig,hand,Quaternion(desired,roll*.25)@q)
 
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True);bpy.context.preferences.filepaths.save_version=0
@@ -71,9 +100,10 @@ def main():
     bone('NpcScaleTop',(0,1,0),(0,1.02,0),'NpcRoot',False)
     for side,sign in [('L',1),('R',-1)]:
         bone('NpcClavicle.'+side,(sign*.035,.78,-.02),(sign*.12,.78,-.02),'NpcChest')
-        bone('NpcUpperArm.'+side,(sign*.12,.78,-.02),(sign*.245,.725,-.02),'NpcClavicle.'+side)
-        bone('NpcForearm.'+side,(sign*.245,.725,-.02),(sign*.34,.692,0),'NpcUpperArm.'+side)
-        bone('NpcHand.'+side,(sign*.34,.692,0),(sign*.43,.675,.015),'NpcForearm.'+side)
+        bone('NpcUpperArm.'+side,(sign*.12,.78,-.02),(sign*.225,.735,-.02),'NpcClavicle.'+side)
+        bone('NpcForearm.'+side,(sign*.225,.735,-.02),(sign*.315,.697,0),'NpcUpperArm.'+side)
+        bone('NpcHand.'+side,(sign*.315,.697,0),(sign*.43,.675,.015),'NpcForearm.'+side)
+        bone('NpcHandTip.'+side,(sign*.43,.675,.015),(sign*.45,.671,.018),'NpcHand.'+side,False)
         bone('NpcThigh.'+side,(sign*.06,.515,0),(sign*.065,.278,.005),'NpcHips')
         bone('NpcShin.'+side,(sign*.065,.278,.005),(sign*.065,.06,.01),'NpcThigh.'+side)
         bone('NpcFoot.'+side,(sign*.065,.06,.01),(sign*.065,.025,.09),'NpcShin.'+side)
@@ -86,7 +116,7 @@ def main():
             if obj.name=='Male.002' or y>.855:weights={'NpcHead':1}
             elif y>.75 and a<.07:weights={'NpcNeck':1}
             elif y>.64 and a>.10:
-                armw=smooth((a-.095)/.07);elbow=smooth((a-.22)/.055);wrist=smooth((a-.315)/.05)
+                armw=smooth((a-.095)/.07);elbow=smooth((a-.195)/.06);wrist=smooth((a-.285)/.06)
                 weights={'NpcChest':1-armw,'NpcUpperArm.'+side:armw*(1-elbow),'NpcForearm.'+side:armw*elbow*(1-wrist),'NpcHand.'+side:armw*elbow*wrist}
             elif y<.56:
                 leg=1-smooth((y-.49)/.07);knee=1-smooth((y-.25)/.055);foot=1-smooth((y-.055)/.04)
@@ -97,12 +127,12 @@ def main():
                 if w>1e-6:obj.vertex_groups[name].add([v.index],w,'REPLACE')
         mod=obj.modifiers.new('NpcSkin','ARMATURE');mod.object=rig;obj.parent=rig
     scene=bpy.context.scene;scene.render.fps=60;rig.animation_data_create()
-    rest=Vector((-.14,.565,.10));pocket=Vector((-.105,.59,.055));mouth=Vector((-.06,.84,.085))
-    clips={'Idle':3.0,'ReachPocket':1.2,'Appear':.6,'RaiseBread':1.2,'Eat':3.3,'ReturnHand':1.4}
+    rest=Vector((-.14,.61,.08));basket=Vector((-.23,.585,.035));mouth=Vector((-.045,.835,.075))
+    clips={'Idle':3.0,'ReachBasket':1.2,'Appear':.6,'RaiseBread':1.2,'Eat':3.3,'ReturnHand':1.4}
     audit={}
     for name,seconds in clips.items():
         action=bpy.data.actions.new(name);action.use_fake_user=True;rig.animation_data.action=action
-        count=round(seconds*60);hand_positions=[]
+        count=round(seconds*60);hand_positions=[];wrist_angles=[];elbow_angles=[];target_errors=[];previous={};max_key_angle=0
         for f in range(count+1):
             t=f/count;scene.frame_set(f)
             for pb in rig.pose.bones:pb.rotation_mode='QUATERNION';pb.matrix_basis=Matrix.Identity(4)
@@ -112,17 +142,32 @@ def main():
                 orient(rig,'NpcThigh.'+side,(sign*.05,-.10,1))
                 orient(rig,'NpcShin.'+side,(0,-1,.03),(0,0,1))
                 orient(rig,'NpcFoot.'+side,(0,-.35,.94))
-            right=rest if name=='Idle' else blend(rest,pocket,t) if name=='ReachPocket' else pocket if name=='Appear' else blend(pocket,mouth,t) if name=='RaiseBread' else mouth if name=='Eat' else blend(mouth,rest,t)
-            ik(rig,'NpcUpperArm.R','NpcForearm.R','NpcHand.R',right,(-1,-.2,0))
-            ik(rig,'NpcUpperArm.L','NpcForearm.L','NpcHand.L',(.14,.565,.12),(1,-.2,0))
-            orient(rig,'NpcHand.R',(0,-.05,1));orient(rig,'NpcHand.L',(0,-.1,1))
+            reach=smooth(t) if name=='ReachBasket' else 1 if name=='Appear' else 1-smooth(t) if name=='RaiseBread' else 0
+            set_world(rig,'NpcSpine',Quaternion(eng((0,0,1)),math.radians(6)*reach)@Quaternion(eng((1,0,0)),math.radians(3)*reach)@rig.data.bones['NpcSpine'].matrix_local.to_quaternion())
+            right=rest if name=='Idle' else arc(rest,(-.18,.64,.10),(-.255,.615,.05),basket,t) if name=='ReachBasket' else basket if name=='Appear' else arc(basket,(-.25,.65,.10),(-.16,.82,.15),mouth,t) if name=='RaiseBread' else mouth if name=='Eat' else arc(mouth,(-.15,.82,.14),(-.19,.65,.10),rest,t)
+            grip=smooth(t) if name=='ReachBasket' else 1 if name in {'Appear','RaiseBread','Eat'} else 1-smooth(t) if name=='ReturnHand' else 0
+            target_errors.append(ik(rig,'NpcUpperArm.R','NpcForearm.R',right,(-1,-.35,-.15)))
+            ik(rig,'NpcUpperArm.L','NpcForearm.L',(.14,.61,.08),(1,-.35,-.15))
+            natural_hand(rig,'NpcForearm.R','NpcHand.R',grip);natural_hand(rig,'NpcForearm.L','NpcHand.L',0)
             if name=='Eat':
-                pb=rig.pose.bones['NpcHead'];pb.rotation_quaternion.rotate(__import__('mathutils').Quaternion((1,0,0),.018*math.sin(t*math.pi*8)))
+                pb=rig.pose.bones['NpcHead'];pb.rotation_quaternion.rotate(Quaternion((1,0,0),.018*math.sin(t*math.pi*8)))
             bpy.context.view_layer.update()
             hand_positions.append(list(pose_matrix(rig.pose.bones['NpcHand.R']).translation))
+            for side in ['L','R']:
+                a,b,c,d=[pose_matrix(rig.pose.bones[n+side]).translation for n in ['NpcUpperArm.','NpcForearm.','NpcHand.','NpcHandTip.']]
+                elbow_angles.append(math.degrees((b-a).angle(c-b)));wrist_angles.append(math.degrees((c-b).angle(d-c)))
             for pb in rig.pose.bones:
+                q=pb.rotation_quaternion
+                if pb.name in previous:
+                    if previous[pb.name].dot(q)<0:q.negate()
+                    max_key_angle=max(max_key_angle,math.degrees(previous[pb.name].rotation_difference(q).angle))
+                previous[pb.name]=q.copy()
                 for prop in ['location','rotation_quaternion','scale']:pb.keyframe_insert(data_path=prop,frame=f,group=pb.name)
-        audit[name]={'seconds':seconds,'frames':count+1,'hand_first_blender':hand_positions[0],'hand_last_blender':hand_positions[-1]}
+        if max(wrist_angles)>31 or min(elbow_angles)<17 or max(elbow_angles)>133:raise RuntimeError('Limites anatomicos excedidos en '+name)
+        if max_key_angle>6:raise RuntimeError('Salto de orientacion entre keyframes: '+name+' '+str(max_key_angle))
+        audit[name]={'seconds':seconds,'frames':count+1,'hand_first_blender':hand_positions[0],'hand_last_blender':hand_positions[-1],
+            'wrist_flex_degrees':[min(wrist_angles),max(wrist_angles)],'elbow_flex_degrees':[min(elbow_angles),max(elbow_angles)],
+            'max_rotation_per_frame_degrees':max_key_angle,'max_target_error':max(target_errors)}
     rig.animation_data.action=bpy.data.actions['Idle'];scene.frame_set(0);scene.frame_start=0;scene.frame_end=180
     bpy.context.view_layer.update();deps=bpy.context.evaluated_depsgraph_get()
     posed=[v.co.copy() for o in meshes for v in o.evaluated_get(deps).data.vertices]
@@ -136,7 +181,8 @@ def main():
         apply_unit_scale=False,apply_scale_options='FBX_SCALE_ALL',add_leaf_bones=False,bake_anim=True,bake_anim_use_all_bones=True,
         bake_anim_use_nla_strips=False,bake_anim_use_all_actions=True,bake_anim_force_startend_keying=True,bake_anim_step=1,bake_anim_simplify_factor=0,path_mode='RELATIVE',use_triangles=True)
     (OUT/'rig-manifest.json').write_text(json.dumps({'clips':audit,'bones':list(arm.bones.keys()),'source_height':height,
-        'source_center_x':cx,'seat_anchor':[0,.485,-.015],'normalized_standing_height':1,'posed_floor':min(p.z for p in posed)},indent=2))
+        'source_center_x':cx,'seat_anchor':[0,.485,-.015],'basket_base':[-.26,.485,.030],'basket_scale':.14,
+        'normalized_standing_height':1,'posed_floor':min(p.z for p in posed)},indent=2))
     (OUT/'rig-status.txt').write_text('OK seated NPC with six clips')
     if (OUT/'rig-error.txt').exists():(OUT/'rig-error.txt').unlink()
 try:main()

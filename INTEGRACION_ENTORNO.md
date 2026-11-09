@@ -8,6 +8,8 @@ fuera de OneDrive. `Proyecto/Proyecto.cpp` contiene el render loop.
 ## Controles y camaras
 
 - **C:** alternar tercera persona y camara libre.
+- **G:** hablar con el axolote de la entrada y avanzar sus tres mensajes; otra
+  pulsacion cierra el ultimo. Al alejarse, desaparece y reinicia para la siguiente visita.
 - **V:** alternar V-Sync. Inicia desactivado (`glfwSwapInterval(0)`).
 - **E en tercera persona:** embarcar cerca del casco; desembarcar solo junto a
   suelo firme del muelle, plataformas u orillas. En camara libre E sigue subiendo.
@@ -110,7 +112,7 @@ https://github.com/una-dinosauria/cmu-mocap .
 
 El modelo fuente de `Models/Persona Kiosko/` se conserva. El activo es
 `Models/KioskNpcRig/KioskNpcRig.fbx`, generado por `tools/build_kiosk_npc.py`:
-armadura de 23 nodos (17 deformantes), pesos suaves y seis clips sentados.
+armadura de 25 nodos (17 deformantes), pesos suaves y seis clips sentados.
 No reutiliza los limites de brazos de la niña. Se doblan muslos, rodillas,
 hombros, codos y muñecas, manteniendo las piernas sentadas durante todo el ciclo.
 Se copian sus cuatro texturas y se guarda tambien el Blender editable.
@@ -123,7 +125,7 @@ calcula para apoyar los pies en el piso, sin depender de la altura de una pose T
 `KioskNpc.h` implementa cuatro estados que conservan el tiempo sobrante entre
 transiciones, independientemente de los FPS:
 
-- Idle (4.2 s): 3 s sentado y 1.2 s llevando la mano al bolsillo.
+- Idle (4.2 s): 3 s sentado y 1.2 s alcanzando la canasta mediante ReachBasket.
 - Aparicion (0.6 s): se activa el render del pan sobre esa mano.
 - Comiendo (4.5 s): 1.2 s elevando el pan y 3.3 s reduciendo su escala de 1 a 0.05.
 - Fin (1.4 s): se oculta completamente el pan y vuelve la mano al regazo.
@@ -132,6 +134,37 @@ Al terminar vuelve a Idle. El pan real de `Models/Pan de muerto/PanMuerto.obj`
 usa su MTL/textura y una matriz padre obtenida de NpcHand.R, con offset de palma
 y orientacion de la base del pan. No se mueve con una posicion fija independiente
 del esqueleto. Solo se dibuja en los estados Aparicion/Comiendo.
+
+La canasta `Models/canasta.obj`/`canasta.mtl` es procedural, con base, tiras de
+mimbre abiertas y asa arqueada; se regenera con `tools/build_canasta.py`.
+BasketMatrix la apoya sobre el asiento, junto al lado derecho del NPC. Su
+posicion coincide con el final de ReachBasket, donde aparece el pan.
+
+Se corrigieron los pivotes del codo y la muñeca segun la malla original. La IK
+de dos segmentos usa un plano de codo estable hacia fuera; las trayectorias
+canasta/boca/regazo son curvas Bezier con aceleracion y frenado suaves. Al tomar
+el pan, el torso se inclina 6 grados lateralmente y 3 hacia delante sin mover
+las piernas. La flexion de muñeca esta limitada a 30 grados; la pronacion se
+distribuye en antebrazo (hasta 45) y muñeca (hasta 15). Los pesos de los vertices
+se reasignaron a los nuevos pivotes. El manifiesto registra rangos articulares
+y rotacion maxima por keyframe: menos de 4.8 grados a 60 FPS, sin saltos de giro.
+
+### Dialogo de Ivanovich
+
+`NpcDialogue.h` mide la distancia de la niña al NPC, con radio horizontal de
+4.5 unidades fuente y diferencia vertical maxima de 3. Al acercarse aparece
+automaticamente un panel 2D; al salir del radio se deja de dibujar. La camara
+libre no se usa como disparador: cuenta la posicion real de la niña.
+
+El texto es exactamente: **¡Qué onda, soy Ivanovich! Este pan de muerto está
+buenísimo... ¡CU, CU, PUMAS!**
+
+`images/IvanovichDialogo.png` contiene la frase Unicode rasterizada en Segoe UI
+a 1600x340, con fondo oscuro semitransparente y contraste alto. Se regenera con
+`tools/build_npc_dialogue.ps1` (UTF-8 con BOM, compatible con Windows PowerShell).
+No requiere instalar FreeType ni cargar fuentes al ejecutar. Los shaders de
+dialogo ajustan el panel a la resolucion, mantienen su proporcion y lo dibujan
+sin profundidad al final del render. Es una sola draw call cuando esta visible.
 
 ## Xoloitzcuintle acompanante
 
@@ -446,7 +479,7 @@ en triangulos enviados, con 57.3% menos tiempo mediano de GPU en esta medicion.
 `--validate` prueba movimiento a distintos FPS, diagonales, escala UV y bloqueo
 de controles. Con el FBX real cargado, simula C y WASD y comprueba que las matrices
 de huesos y la posicion permanezcan exactamente iguales mientras la camara se mueve.
-Dibuja 800 frames con niña, xolo, bote, agua, arboles, fachadas, luces y ambas camaras; verifica profundidad
+Dibuja 840 frames con niña, xolo, bote, agua, arboles, fachadas, luces y ambas camaras; verifica profundidad
 y errores de OpenGL. Mide la flexion de codos y rodillas en los clips importados,
 prueba entrada/salida de pasto a 30/60/144 FPS y comprueba las tapas elevadas del
 escenario real. Comprueba exactamente una iglesia, repeticion de las tres casas,
@@ -463,7 +496,7 @@ anticipacion de cabeza, desfase de torso y flexion de patas durante el giro.
 Comprueba 4500 poses/mezclas de brazos, la cobertura completa del muelle,
 la reproduccion sin bucle y el seguimiento/accion/regreso a 30/60/144 FPS. Simula la
 tecla F y captura las tres fases. `--validate-character` omite el entorno masivo
-y dibuja 420 frames con ambos personajes.
+y dibuja 460 frames con los personajes y el axolote.
 Ambos modos prueban embarque, poses de pasajeros, distancia independiente de FPS,
 timon, altura exacta, colision de casco, desembarque/reembarque en las cuatro
 orillas y regreso al muelle a 30/60/144 FPS. La prueba completa usa el suelo real,
@@ -473,6 +506,10 @@ El NPC prueba los cuatro estados y dos ciclos completos a 30/60/144 FPS,
 incluido el anclaje a la mano y la reduccion monotona del pan. Las capturas
 400/405/410/415/417 (modo rapido) y 780/785/790/795/797 (escena completa)
 revisan reposo, aparicion, comida, retorno y reinicio sobre la banca.
+Las tomas de aparicion/comida colocan a la niña dentro del radio y comprueban el
+panel; las otras tomas la dejan fuera y exigen que desaparezca. Tambien se
+comprueba que la canasta apoye en la banca, que la mano alcance su abertura y
+que codos y muñecas permanezcan dentro de los limites a 30/60/144 FPS.
 Se comprueban tambien las UV repetidas del muelle y la oscilacion de la flecha
 sin modificar la altura del bote; se repite el recorrido real de acceso al muelle.
 Ambos modos caminan hasta el borde del muelle y embarcan a 30/60/144 FPS; el
@@ -486,4 +523,106 @@ se lee el resultado cuando esta disponible, sin detener el render. Los tiempos
 de render excluyen la carga de modelos y la lectura/guardado de capturas.
 
 La carga del OBJ de 325 MB puede tardar varios minutos. La navegacion ajusta
-la altura al terreno, pero no incluye colisiones solidas contra paredes.
+la altura al terreno y bloquea las cuatro puertas blancas con colisiones solidas.
+
+## Axolote de la entrada y dialogo del festival
+
+Se copio completa la carpeta del Escritorio a `Proyecto/Models/AxoloteEntrada/`,
+conservando los originales `AjoloteEntrada.blend` y su respaldo.
+El archivo cargado una sola vez por Assimp es `AxoloteEntrada.fbx`, con dos PNG incrustados; tambien se
+generaron `AxoloteEntrada.glb` y `AxoloteSaludo.blend` para edicion/exportacion.
+El Assimp incluido en la solucion requiere FBX para este personaje.
+
+`tools/build_axolote.py` crea seis huesos deformantes y el unico clip `AxoGreeting`
+de ocho segundos. La maquina pasa por reposo, elevacion, saludo lateral de mano
+(+/-16 grados), retorno y reposo. No contiene ademanes de llamar al jugador.
+Descarta antes de asignar pesos los vertices sueltos sin caras para evitar el
+fallo del importador FBX antiguo. Los ojos, reflejos y sonrisa quedan ligados a la cabeza.
+
+El Blender entregado no tiene material asignado a piel/ojos y su material de
+plumas apunta a un archivo ausente. Se conservan las UV originales y los slots
+existentes; las texturas de plumas y ropa se recuperan de los assets Xolotl
+del mismo escenario y se empaquetan en FBX/GLB. La piel tiene dos materiales
+para distinguir cuerpo y branquias. El original no se sobrescribe.
+
+`Model.h` reconoce las referencias incrustadas *0/*1 de Assimp: PNG/JPEG se
+decodifican con stb_image desde memoria; aiTexel sin comprimir se convierte de
+BGRA a RGBA. `Texture2D.h` aplica mipmaps, repeticion y anisotropia al mismo
+camino de subida GPU. Los materiales conservan el factor baseColor glTF cuando
+existe y usan las UV del canal 0. Cada imagen se carga/cachea una sola vez.
+
+El NPC mide 4.4 unidades fuente incluyendo el penacho. Su posicion se obtiene
+del AABB real de `letrero_bienvenida.001`: borde derecho del letrero azul,
+mas medio ancho del modelo y 0.65 unidades de separacion. Se busca suelo a
+menos de 1.5 unidades de su plano; no se coloca en la calle de la plaza.
+
+`AxoloteNpc.h` usa un trigger horizontal de radio 5, con tolerancia vertical 3.
+Al entrar muestra el aviso G. G avanza exactamente los mensajes 1, 2 y 3;
+una pulsacion adicional los cierra. Salir del trigger, navegar o reiniciar
+restablece la secuencia; G se desactiva en camara libre y a bordo.
+Los mensajes Unicode solicitados estan en `tools/build_axolote_dialogue.ps1`
+y se rasterizan con Segoe UI a cuatro PNG RGBA en `images/AxoloteDialogo[0-3].png`.
+La interfaz reutiliza una geometria, selecciona la textura de la pagina y hace
+un solo draw call; no carga fuentes ni texturas dentro del loop. Tiene prioridad
+sobre el panel de Ivanovich para evitar superposiciones.
+
+## Cuatro puertas blancas solidas
+
+`Model::AddDoors` separa las cuatro portadas cardinales del material
+`Stuco_Wall`, preservando la pieza central del kiosko. Cada arco recibe una
+traslacion de 3 unidades fuente hacia el centro del parque y su base se ajusta
+al piso interior. La validacion exige que los ocho pilares queden estrictamente
+dentro del AABB del piso del parque y a su misma altura.
+
+Se calculan DOS AABB por arco, una por cada pilar, a partir del tramo vertical
+de la malla. El dintel/boveda no participa en las cajas y el centro queda abierto.
+`SolidObstacles.h` mantiene el barrido continuo, recuperacion de penetracion y
+deslizamiento. Prueba los ocho pilares a 4000 unidades/s por ambos ejes/sentidos
+y recorre los cuatro huecos caminando/corriendo en ambos sentidos a 30/60/144 FPS,
+con ajuste de altura sobre el piso real; falla si aparece una pared invisible.
+
+## Vista limpia en Visual Studio
+
+Los archivos `.vcxproj` y `.vcxproj.filters` ya no enumeran scripts de
+exportacion, archivos Blender, GLB alternativos ni OBJ originales reemplazados
+por rigs. Todos permanecen en disco. Se conservan los FBX activos de niña, xolo,
+NPC y axolote, el perfil anatomico y los recursos de ejecucion.
+Los FBX activos no son residuos: C++ los carga al iniciar. Ambos XML tienen
+los mismos elementos, sin referencias inexistentes ni duplicadas.
+
+La validacion rapida ahora ejecuta 460 cuadros y la completa 840. Añaden
+dos ciclos de saludo a 30/60/144 FPS, continuidad de mano, limite de muñeca,
+G secuencial y capturas de aviso/mensajes/cierre/salida del trigger.
+
+## Compilacion y ejecucion automáticas
+
+Despues de cada cambio de codigo, compilar con MSBuild de Visual Studio 2022
+y ejecutar el proyecto automaticamente; comprobar que ambas operaciones terminen
+correctamente. `--validate` verifica la escena completa y termina con codigo cero
+tras 840 cuadros sin errores OpenGL. `--validate-character` sirve como comprobacion
+previa de 460 cuadros para modelos, materiales, animaciones y dialogos.
+
+## Luna e iluminacion nocturna
+
+`MoonSky.h` crea una esfera de 2145 vertices y 3968 triangulos, una sola vez
+al cargar. Usa `Shader/moon.vs` y `moon.frag` para crateres procedurales
+y emision propia, sin textura externa ni animacion orbital. Posicion de mundo:
+(3100, 10000, -2600), radio 280. La Luna escribe profundidad, queda detras
+de los objetos y delante del skybox; el plano lejano siempre incluye su esfera.
+Una prueba GPU verifica su silueta y su brillo. Las capturas 420 (rapida)
+y 800 (completa) miran directamente hacia ella.
+
+La direccion de luz se calcula desde el punto medio entre plaza y lago hacia
+la Luna. Los shaders de entorno, personajes y farolas reciben esa misma luz
+direccional global: ambiente (0.17, 0.20, 0.28), difusa (0.32, 0.36, 0.47).
+Se conserva la iluminacion calida local de las doce farolas. El agua utiliza
+la misma direccion/color y agrega un reflejo especular que responde a su
+normal animada y a la posicion de la camara. No hay caida por distancia para
+la luz lunar: alcanza tanto el Zocalo como la laguna.
+
+## Recuento de animaciones
+
+`ANIMACIONES.md` documenta **17 tipos activos**: 14 clips esqueleticos
+(3 niña, 4 xolo, 6 NPC, 1 ajolote) y 3 efectos independientes (pan, agua, flecha).
+Se cuentan los reposos y cada clip completo una sola vez; la Luna es estatica.
+La consola muestra el recuento obtenido de los FBX cargados.

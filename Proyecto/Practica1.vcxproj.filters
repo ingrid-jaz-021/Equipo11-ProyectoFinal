@@ -55,6 +55,7 @@
     <ClInclude Include="Frustum.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="RenderMetrics.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="KioskNpc.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="NpcDialogue.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="DockSurface.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="MovementSettings.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="Camera.h">
@@ -73,15 +74,16 @@
     <None Include="images\Cerca_lago.png"><Filter>Archivos de recursos</Filter></None>
     <None Include="Models\barquito.obj"><Filter>Archivos de recursos</Filter></None>
     <None Include="Models\barquito.mtl"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\canasta.obj"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\canasta.mtl"><Filter>Archivos de recursos</Filter></None>
+    <None Include="images\IvanovichDialogo.png"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Shader\dialogue.vs"><Filter>Archivos de origen\Shader</Filter></None>
+    <None Include="Shader\dialogue.frag"><Filter>Archivos de origen\Shader</Filter></None>
     <None Include="Models\KioskNpcRig\KioskNpcRig.fbx"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\KioskNpcRig\KioskNpcRig.blend"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\Persona Kiosko\PersonaZoc.obj"><Filter>Archivos de recursos</Filter></None>
     <None Include="Models\Pan de muerto\PanMuerto.obj"><Filter>Archivos de recursos</Filter></None>
     <None Include="Models\Pan de muerto\PanMuerto.mtl"><Filter>Archivos de recursos</Filter></None>
     <None Include="Models\Pan de muerto\Texturapan.jpg"><Filter>Archivos de recursos</Filter></None>
     <None Include="images\MuelleMadera.png"><Filter>Archivos de recursos</Filter></None>
-    <None Include="tools\build_kiosk_npc.py"><Filter>Archivos de recursos</Filter></None>
-    <None Include="tools\build_dock_texture.py"><Filter>Archivos de recursos</Filter></None>
     <None Include="Shader\billboard.vs"><Filter>Archivos de origen\Shader</Filter></None>
     <None Include="Shader\billboard_instanced.vs"><Filter>Archivos de origen\Shader</Filter></None>
     <None Include="Shader\billboard_instanced.frag"><Filter>Archivos de origen\Shader</Filter></None>
@@ -91,12 +93,6 @@
     <None Include="Shader\water.frag"><Filter>Archivos de origen\Shader</Filter></None>
     <None Include="Models\EntornoCompleto\Laguna\Agua\WaterPlane.txt"><Filter>Archivos de recursos</Filter></None>
     <None Include="Models\EntornoCompleto\Laguna\Agua\River_Water_Texture-427.jpg"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\niña zocalo.obj">
-      <Filter>Archivos de recursos</Filter>
-    </None>
-    <None Include="Models\niña zocalo.mtl">
-      <Filter>Archivos de recursos</Filter>
-    </None>
     <None Include="Shader\modelLoading.frag">
       <Filter>Archivos de origen\Shader</Filter>
     </None>
@@ -117,5 +113,26 @@
     <ClCompile Include="Proyecto.cpp">
       <Filter>Archivos de origen</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="AxoloteNpc.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="SolidObstacles.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <None Include="Models\AxoloteEntrada\AxoloteEntrada.fbx"><Filter>Archivos de recursos</Filter></None>
+    <None Include="images\AxoloteDialogo0.png"><Filter>Archivos de recursos</Filter></None>
+    <None Include="images\AxoloteDialogo1.png"><Filter>Archivos de recursos</Filter></None>
+    <None Include="images\AxoloteDialogo2.png"><Filter>Archivos de recursos</Filter></None>
+    <None Include="images\AxoloteDialogo3.png"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\NinaRig\NinaRig.fbx"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\NinaRig\arm-limits.txt"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\XoloRig\XoloRig.fbx"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\XoloRig\textures\xolo_skin.png"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\XoloRig\textures\xolo_features.jpg"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\Farola\Farola.obj"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\Farola\Farola.mtl"><Filter>Archivos de recursos</Filter></None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="MoonSky.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <None Include="Shader\moon.vs"><Filter>Archivos de origen\Shader</Filter></None>
+    <None Include="Shader\moon.frag"><Filter>Archivos de origen\Shader</Filter></None>
   </ItemGroup>
 </Project>

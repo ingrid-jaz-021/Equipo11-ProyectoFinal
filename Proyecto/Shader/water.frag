@@ -5,6 +5,9 @@ out vec4 FragColor;
 uniform sampler2D texture_diffuse1;
 uniform float time;
 uniform vec3 eyePosition;
+uniform vec3 moonDirection;
+uniform vec3 ambientLight;
+uniform vec3 diffuseLight;
 vec2 patchOffset(vec2 cell)
 {
     return fract(sin(vec2(dot(cell, vec2(127.1,311.7)),
@@ -32,7 +35,11 @@ void main()
     vec3 normal = normalize(vec3(ripple.x * 0.045, 1.0, ripple.y * 0.045));
     vec3 viewDirection = normalize(eyePosition - WorldPosition);
     float fresnel = pow(1.0 - max(dot(normal, viewDirection), 0.0), 4.0);
-    vec3 color = mix(albedo * 0.76, vec3(0.075, 0.13, 0.19), fresnel * 0.34);
+    vec3 lighting=ambientLight+diffuseLight*max(dot(normal,normalize(moonDirection)),0.0);
+    vec3 color=mix(albedo*lighting,vec3(0.038,0.074,0.14),fresnel*.34);
+    vec3 halfDirection=normalize(normalize(moonDirection)+viewDirection);
+    float moonGlint=pow(max(dot(normal,halfDirection),0.0),48.0);
+    color+=diffuseLight*moonGlint*.60;
     // El agua escribe profundidad; las plataformas y esculturas conservan su
     // oclusion real y el cielo no se transparenta por debajo de la laguna.
     FragColor = vec4(color, 1.0);
