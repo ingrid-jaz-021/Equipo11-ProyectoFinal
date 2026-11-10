@@ -40,6 +40,7 @@
     <ClInclude Include="Camera.h" />
     <ClInclude Include="ZocaloLighting.h" />
     <ClInclude Include="LagunaSpotLighting.h" />
+    <ClInclude Include="LagunaDancer.h" />
     <ClInclude Include="CharacterController.h" />
     <ClInclude Include="CompanionController.h" />
     <ClInclude Include="GroundSurface.h" />
@@ -55,6 +56,10 @@
     <None Include="Models\XoloRig\XoloRig.fbx" />
     <None Include="Models\XoloRig\textures\xolo_skin.png" />
     <None Include="Models\XoloRig\textures\xolo_features.jpg" />
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\XolotlDanza.fbx" />
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\XolotlDanza.xanim" />
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\XolotlDanza.blend" />
+    <None Include="tools\build_xolotl_rig_dance.py" />
     <None Include="images\Arbol_RGBA.png" />
     <None Include="images\Casa1.png" />
     <None Include="images\Casa2.png" />

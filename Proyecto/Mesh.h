@@ -4,6 +4,7 @@
 #include <cmath>
 #include <map>
 #include <limits>
+#include <stdexcept>
 #include <vector>
 #include <GL/glew.h>
 #include <glm/glm.hpp>
@@ -32,9 +33,9 @@ class Mesh
 public:
     Mesh(const std::vector<Vertex>& vertices, const std::vector<GLuint>& indices,
         const MeshMaterial& material, const glm::vec3& minBounds, const glm::vec3& maxBounds,
-        const std::vector<SkinVertex>& skin = {},const glm::mat4& localTransform=glm::mat4(1),bool spatial=false)
+        const std::vector<SkinVertex>& skin = {},const glm::mat4& localTransform=glm::mat4(1),bool spatial=false,bool dynamic=false)
         : material(material), minBounds(minBounds), maxBounds(maxBounds),
-        indexCount(static_cast<GLsizei>(indices.size())),localTransform(localTransform)
+        indexCount(static_cast<GLsizei>(indices.size())),vertexCount(vertices.size()),localTransform(localTransform)
     {
         localNormal=glm::transpose(glm::inverse(glm::mat3(localTransform)));identityTransform=localTransform==glm::mat4(1);
         std::vector<GLuint> reordered;
@@ -45,7 +46,7 @@ public:
         glGenBuffers(1, &EBO);
         glBindVertexArray(VAO);
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), dynamic?GL_DYNAMIC_DRAW:GL_STATIC_DRAW);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, gpuIndices.size() * sizeof(GLuint), gpuIndices.data(), GL_STATIC_DRAW);
         glEnableVertexAttribArray(0);
@@ -73,7 +74,7 @@ public:
     Mesh(const Mesh&) = delete;
     Mesh& operator=(const Mesh&) = delete;
     Mesh(Mesh&& other) noexcept : material(other.material), minBounds(other.minBounds),
-        maxBounds(other.maxBounds), indexCount(other.indexCount),
+        maxBounds(other.maxBounds), indexCount(other.indexCount),vertexCount(other.vertexCount),
         VAO(other.VAO), VBO(other.VBO), EBO(other.EBO), skinVBO(other.skinVBO),localTransform(other.localTransform),
         localNormal(other.localNormal),identityTransform(other.identityTransform),chunks(std::move(other.chunks))
     {
@@ -85,7 +86,7 @@ public:
         if (this != &other)
         {
             Release();
-            material = other.material; indexCount = other.indexCount;
+            material = other.material; indexCount = other.indexCount;vertexCount=other.vertexCount;
             minBounds = other.minBounds; maxBounds = other.maxBounds;
             VAO = other.VAO; VBO = other.VBO; EBO = other.EBO;
             skinVBO = other.skinVBO;
@@ -104,6 +105,13 @@ public:
     const glm::mat4& LocalTransform() const{return localTransform;}
     const glm::mat3& LocalNormal() const{return localNormal;}
     bool HasIdentityTransform() const{return identityTransform;}
+    void UpdateVertices(const std::vector<Vertex>& vertices)
+    {
+        if(vertices.size()!=vertexCount)throw std::runtime_error("La secuencia de malla cambio su topologia.");
+        glBindBuffer(GL_ARRAY_BUFFER,VBO);
+        glBufferSubData(GL_ARRAY_BUFFER,0,vertices.size()*sizeof(Vertex),vertices.data());
+        glBindBuffer(GL_ARRAY_BUFFER,0);
+    }
 
     void Draw(const Shader& shader,const FrustumPlanes* planes=nullptr) const
     {
@@ -140,6 +148,7 @@ private:
     MeshMaterial material;
     glm::vec3 minBounds, maxBounds;
     GLsizei indexCount = 0;
+    size_t vertexCount=0;
     GLuint VAO = 0, VBO = 0, EBO = 0;
     GLuint skinVBO = 0;
     glm::mat4 localTransform=glm::mat4(1);
