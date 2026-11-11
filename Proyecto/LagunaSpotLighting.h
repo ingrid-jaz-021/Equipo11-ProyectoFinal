@@ -21,11 +21,8 @@ public:
         float range;
     };
 
-    void Build(const Model& environment, const glm::vec3& sourceOrigin, float worldScale)
+    static std::vector<glm::vec3> FindLampCenters(const Model& environment)
     {
-        glm::vec3 pyramidMin, pyramidMax;
-        if (!environment.GetMaterialBounds("Material.025", pyramidMin, pyramidMax))
-            throw std::runtime_error("No se encontro Piramide2 en la malla combinada.");
         const auto* lampVertices = environment.GetMaterialPositions("Material.026");
         if (!lampVertices || lampVertices->empty())
             throw std::runtime_error("No se encontraron instancias de LuzEsc en la malla combinada.");
@@ -79,11 +76,18 @@ public:
                 hi = glm::max(hi, glm::vec2(points[index].x, points[index].z));
                 top = (std::max)(top, points[index].y);
             }
-            // Una sola instancia tiene un cuerpo compacto; descarta agrupaciones
-            // residuales de material o geometria aislada que no sea una LuzEsc.
             if (hi.x - lo.x > 3.5f || hi.y - lo.y > 3.5f || cluster.size() < 4) continue;
             centers.emplace_back((lo.x + hi.x) * 0.5f, top, (lo.y + hi.y) * 0.5f);
         }
+        return centers;
+    }
+
+    void Build(const Model& environment, const glm::vec3& sourceOrigin, float worldScale)
+    {
+        glm::vec3 pyramidMin, pyramidMax;
+        if (!environment.GetMaterialBounds("Material.025", pyramidMin, pyramidMax))
+            throw std::runtime_error("No se encontro Piramide2 en la malla combinada.");
+        const auto centers = FindLampCenters(environment);
         std::cout << "Material LuzEsc: " << centers.size() << " instancias agrupadas.\n";
         if (centers.empty() || centers.size() > 32)
             throw std::runtime_error("No se pudo separar de forma segura las instancias de LuzEsc.");

@@ -12,6 +12,8 @@
 class LagunaDancer
 {
 public:
+    static constexpr float HeadingDegrees = 270.0f;
+
     void Configure(const Model& environment, Model& dancer,
         const glm::vec3& sourceOrigin, float worldScale)
     {
@@ -45,7 +47,8 @@ public:
         if (!dancer.HasBakedAnimation())
             throw std::runtime_error("XolotlDanza.xanim no contiene poses para reproducir.");
         std::cout << "Xolotl en el centro del escenario: " << center.x << ", " << center.y << ", "
-            << center.z << "; 17 huesos, escala 5.0f (5.6x la nina), giro horario 90 grados, baile ciclico activo." << std::endl;
+            << center.z << "; 17 huesos, escala 5.0f (5.6x la nina), giro Y horario de "
+            << HeadingDegrees << " grados, baile ciclico activo." << std::endl;
         configured = true;
     }
 
@@ -59,7 +62,7 @@ public:
     glm::mat4 ModelMatrix(const Model& dancer) const
     {
         glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
-        model = glm::rotate(model, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        model = glm::rotate(model, glm::radians(HeadingDegrees), glm::vec3(0.0f, 1.0f, 0.0f));
         model = glm::scale(model, glm::vec3(modelScale));
         return glm::translate(model, glm::vec3(0.0f, -dancer.GetMinBounds().y, 0.0f));
     }
