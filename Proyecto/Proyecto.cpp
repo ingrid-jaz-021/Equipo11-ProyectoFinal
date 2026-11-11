@@ -710,6 +710,11 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     KioskNpc npc;npc.ConfigureNpc(npcModel,breadModel,environment.get(),SOURCE_SPAWN,ENVIRONMENT_SCALE);
     if(validate)npc.Validate();
     NpcDialogue dialogue;
+    std::unique_ptr<NpcDialogue> ofrendaDialogue;
+    if (environment)
+    {
+        ofrendaDialogue = std::make_unique<NpcDialogue>(std::vector<std::string>{ "images/OfrendaInfo.png" });
+    }
     Model lamp("Models/Farola/Farola.obj", keepLoading,{nullptr,false,{"Material.001"}});
     ZocaloLighting plazaLights;
     plazaLights.Build(lamp, environment.get(), ground, SOURCE_SPAWN, ENVIRONMENT_SCALE);
@@ -783,7 +788,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     double previous = glfwGetTime();
     FrameProfiler profiler(profiling);
     int frame = 0;
-    unsigned dialogueNearSamples=0,dialogueFarSamples=0,axoloteDialogueSamples=0;
+    unsigned dialogueNearSamples=0,dialogueFarSamples=0,axoloteDialogueSamples=0,ofrendaDialogueSamples=0;
     glm::vec3 pausedBoat(0);std::vector<glm::mat4> pausedHuman,pausedDog;
     while (!glfwWindowShouldClose(window))
     {
@@ -892,6 +897,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
                 const glm::vec3 target(-464.0f, 18.0f, -985.0f);
                 const glm::vec3 eye(-464.0f, 140.0f, -680.0f);
                 SetValidationCamera(eye, target);
+                player.position = glm::vec3(-463.5f, 0.0f, -800.0f);
             }
             if(frame==200)
                 SetValidationCamera(backdrop->Center()+glm::vec3(1300,1150,-1300),backdrop->Center());
@@ -1078,6 +1084,13 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         const bool showDialogue=NpcDialogue::IsNearby(player.position,npc.position,ENVIRONMENT_SCALE);
         dialogue.Draw(showDialogue&&!axolote.DialogueVisible(),width,height);
         axolote.DrawDialogue(width,height);
+        if (ofrendaDialogue)
+        {
+            const bool showOfrenda = NpcDialogue::IsOfrendaNearby(player.position) ||
+                (cameraMode == CameraMode::Free && NpcDialogue::IsOfrendaNearby(freeCamera.GetPosition()));
+            ofrendaDialogue->Draw(showOfrenda && !showDialogue && !axolote.DialogueVisible(), width, height);
+            if (validate && showOfrenda) ++ofrendaDialogueSamples;
+        }
         profiler.EndRender();
         const int actionFrame=environment?340:140;
         const bool captureAction=frame==actionFrame||frame==actionFrame+55||frame==actionFrame+96||frame==actionFrame+132||frame==actionFrame+180||frame==actionFrame+255;
@@ -1109,6 +1122,8 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             if(axoloteDialogueSamples<4)throw std::runtime_error("Faltan los tres paneles del axolote en pantalla.");
             std::cout<<"Axolote visual OK: aviso G, mensajes 1/2/3, cierre y salida del trigger."<<std::endl;
             std::cout<<"Dialogo OK: texto visible al acercarse y oculto al alejarse; UI RGBA sin errores."<<std::endl;
+            if (ofrendaDialogue && ofrendaDialogueSamples < 1) throw std::runtime_error("El cuadro de informacion de la ofrenda no aparecio.");
+            std::cout << "Ofrenda de las mil luces: cuadro informativo visible al acercarse en medio OK." << std::endl;
             std::cout << "VALIDACION OK: animacion suave, luces, ambas camaras y " << frame
                 << " frames sin errores OpenGL." << std::endl;
             break;
