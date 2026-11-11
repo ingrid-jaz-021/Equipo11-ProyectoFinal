@@ -42,6 +42,7 @@
     <ClInclude Include="LagunaSpotLighting.h" />
     <ClInclude Include="LagunaDancer.h" />
     <ClInclude Include="LagunaAlmas.h" />
+    <ClInclude Include="GuiaAntorchas.h" />
     <ClInclude Include="CharacterController.h" />
     <ClInclude Include="CompanionController.h" />
     <ClInclude Include="GroundSurface.h" />

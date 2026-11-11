@@ -28,6 +28,7 @@
 #include "LagunaSpotLighting.h"
 #include "LagunaDancer.h"
 #include "LagunaAlmas.h"
+#include "GuiaAntorchas.h"
 #include "TreeVegetation.h"
 #include "ZocaloBackdrop.h"
 #include "WaterSurface.h"
@@ -652,6 +653,9 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     std::unique_ptr<Model> lagunaDancerModel;
     LagunaDancer lagunaDancer;
     LagunaAlmas lagunaAlmas;
+    std::unique_ptr<Model> hombreGuiaModel;
+    std::unique_ptr<Model> mujerGuiaModel;
+    GuiaAntorchas guiaAntorchas;
     glfwSetWindowTitle(window, "Cargando rig del Xolotl...");
     lagunaDancerModel = std::make_unique<Model>("Models/EntornoCompleto/Laguna/Xolotl/XolotlDanza.xanim",keepLoading);
     const auto skeletalClips=girl.Animator()->ClipCount()+dog.Animator()->ClipCount()+npcModel.Animator()->ClipCount()+axoloteModel.Animator()->ClipCount();
@@ -681,6 +685,10 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         if (validate) { environment->ValidateLayout(); ValidateSceneGrass(ground); ValidatePasilloGround(ground); }
         lagunaDancer.Configure(*environment, *lagunaDancerModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
         lagunaAlmas.Configure(*environment, almaModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
+        glfwSetWindowTitle(window, "Cargando guias con antorcha...");
+        hombreGuiaModel = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA.obj", keepLoading);
+        mujerGuiaModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA.obj", keepLoading);
+        guiaAntorchas.Configure(*environment, *hombreGuiaModel, *mujerGuiaModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
     }
     SolidObstacles doors;
     if(environment){doors.Build(*environment,SOURCE_SPAWN,ENVIRONMENT_SCALE);if(validate)doors.Validate(ground,SOURCE_SPAWN,ENVIRONMENT_SCALE);activeDoors=&doors;}
@@ -854,8 +862,9 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
                 glm::vec3 min, max;
                 if (!environment->GetMaterialBounds("Arco_Ofrenda.001", min, max))
                     throw std::runtime_error("Falta el arco del Pasillo.");
-                const glm::vec3 center = ((min + max) * 0.5f - SOURCE_SPAWN) * ENVIRONMENT_SCALE;
-                SetValidationCamera(center + glm::vec3(160, 25, 160), center);
+                const glm::vec3 target = (glm::vec3(-115.0f, 3.5f, 242.0f) - SOURCE_SPAWN) * ENVIRONMENT_SCALE;
+                const glm::vec3 eye = (glm::vec3(-115.0f, 4.2f, 226.0f) - SOURCE_SPAWN) * ENVIRONMENT_SCALE;
+                SetValidationCamera(eye, target);
             }
             if(frame==200)
                 SetValidationCamera(backdrop->Center()+glm::vec3(1300,1150,-1300),backdrop->Center());
@@ -1002,6 +1011,11 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             for (size_t row = 0; row < LagunaAlmas::RowCount; ++row)
                 for (size_t i = 0; i < LagunaAlmas::Count; ++i)
                     DrawObject(almaModel, environmentShader, lagunaAlmas.ModelMatrix(almaModel, i, row), view, projection);
+        if (guiaAntorchas.Configured() && hombreGuiaModel && mujerGuiaModel)
+        {
+            DrawObject(*hombreGuiaModel, environmentShader, guiaAntorchas.HombreMatrix(), view, projection);
+            DrawObject(*mujerGuiaModel, environmentShader, guiaAntorchas.MujerMatrix(), view, projection);
+        }
         moon.Draw(view,projection,eye);
         if(water)water->Draw(view,projection,eye,now);
         glDepthFunc(GL_LEQUAL);
