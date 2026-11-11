@@ -622,7 +622,8 @@ la luz lunar: alcanza tanto el Zocalo como la laguna.
 
 ## Recuento de animaciones
 
-`ANIMACIONES.md` documenta **17 tipos activos**: 14 clips esqueleticos
-(3 niña, 4 xolo, 6 NPC, 1 ajolote) y 3 efectos independientes (pan, agua, flecha).
+`ANIMACIONES.md` documenta **18 tipos activos**: 14 clips esqueleticos
+(3 niña, 4 xolo, 6 NPC, 1 ajolote) y 4 efectos independientes (pan, agua,
+flecha y marcha procedural de los dos Guias Antorcha).
 Se cuentan los reposos y cada clip completo una sola vez; la Luna es estatica.
 La consola muestra el recuento obtenido de los FBX cargados.

@@ -28,6 +28,7 @@
 #include "LagunaSpotLighting.h"
 #include "LagunaDancer.h"
 #include "LagunaAlmas.h"
+#include "GuiaAntorcha.h"
 #include "TreeVegetation.h"
 #include "ZocaloBackdrop.h"
 #include "WaterSurface.h"
@@ -592,7 +593,8 @@ void SetValidationCamera(const glm::vec3& eye, const glm::vec3& target)
     cameraMode = CameraMode::Free;
 }
 void DrawObject(const Model& object, const Shader& shader, const glm::mat4& model,
-    const glm::mat4& view, const glm::mat4& projection, const CharacterController* actor=nullptr)
+    const glm::mat4& view, const glm::mat4& projection, const CharacterController* actor=nullptr,
+    const GuiaAntorcha::Pose* guidePose=nullptr)
 {
     if(actor)
     {
@@ -601,6 +603,14 @@ void DrawObject(const Model& object, const Shader& shader, const glm::mat4& mode
         {++RenderMetrics::culled;return;}
     }
     shader.Use();
+    glUniform1i(shader.Uniform("guideWalkEnabled"), guidePose ? 1 : 0);
+    if (guidePose)
+    {
+        glUniform3fv(shader.Uniform("guideBoundsMin"), 1, glm::value_ptr(guidePose->boundsMin));
+        glUniform3fv(shader.Uniform("guideBoundsMax"), 1, glm::value_ptr(guidePose->boundsMax));
+        glUniform1f(shader.Uniform("guideWalkPhase"), guidePose->phase);
+        glUniform1f(shader.Uniform("guideTravelDirection"), guidePose->travelDirection);
+    }
     glUniformMatrix4fv(shader.Uniform("view"), 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(shader.Uniform("projection"), 1, GL_FALSE, glm::value_ptr(projection));
     if (actor)
@@ -649,13 +659,16 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     Model basketModel("Models/canasta.obj",keepLoading);
     Model boatModel("Models/barquito.obj",keepLoading);
     Model almaModel("Models/EntornoCompleto/Laguna/Almas/alma.obj",keepLoading);
+    auto guiaWoman = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA.obj", keepLoading);
+    auto guiaMan = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA.obj", keepLoading);
     std::unique_ptr<Model> lagunaDancerModel;
     LagunaDancer lagunaDancer;
     LagunaAlmas lagunaAlmas;
+    GuiaAntorcha guiasAntorcha;
     glfwSetWindowTitle(window, "Cargando rig del Xolotl...");
     lagunaDancerModel = std::make_unique<Model>("Models/EntornoCompleto/Laguna/Xolotl/XolotlDanza.xanim",keepLoading);
     const auto skeletalClips=girl.Animator()->ClipCount()+dog.Animator()->ClipCount()+npcModel.Animator()->ClipCount()+axoloteModel.Animator()->ClipCount();
-    std::cout<<"Inventario de animaciones: "<<skeletalClips+3<<" tipos = "<<skeletalClips<<" clips esqueleticos + pan que disminuye + agua animada + flecha oscilante."<<std::endl;
+    std::cout<<"Inventario de animaciones: "<<skeletalClips+4<<" tipos = "<<skeletalClips<<" clips esqueleticos + pan que disminuye + agua animada + flecha oscilante + marcha procedural de dos guias."<<std::endl;
     if(validate&&skeletalClips!=14)throw std::runtime_error("El inventario de clips activos cambio; actualizar ANIMACIONES.md.");
     if(validate&&characterOnly)
     {
@@ -681,6 +694,8 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         if (validate) { environment->ValidateLayout(); ValidateSceneGrass(ground); ValidatePasilloGround(ground); }
         lagunaDancer.Configure(*environment, *lagunaDancerModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
         lagunaAlmas.Configure(*environment, almaModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
+        guiasAntorcha.Configure(*environment, ground, *guiaWoman, *guiaMan, SOURCE_SPAWN, ENVIRONMENT_SCALE);
+        if (validate) guiasAntorcha.Validate();
     }
     SolidObstacles doors;
     if(environment){doors.Build(*environment,SOURCE_SPAWN,ENVIRONMENT_SCALE);if(validate)doors.Validate(ground,SOURCE_SPAWN,ENVIRONMENT_SCALE);activeDoors=&doors;}
@@ -822,6 +837,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         else DoMovement(window,dt,environment?&ground:nullptr);
         if (lagunaDancerModel) lagunaDancer.Update(*lagunaDancerModel, dt);
         lagunaAlmas.Update(dt);
+        guiasAntorcha.Update(dt);
         UpdateFollowCamera(dt);
         npc.UpdateNpc(dt);
         axolote.UpdateGreeting(dt);
@@ -998,6 +1014,13 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         DrawObject(dog,characterShader,companion.ModelMatrix(),view,projection,&companion);
         if (lagunaDancerModel && lagunaDancer.Configured())
             DrawObject(*lagunaDancerModel,environmentShader,lagunaDancer.ModelMatrix(*lagunaDancerModel),view,projection);
+        if (guiasAntorcha.Configured())
+        {
+            const auto womanPose = guiasAntorcha.CurrentPose(0);
+            const auto manPose = guiasAntorcha.CurrentPose(1);
+            DrawObject(*guiaWoman, environmentShader, womanPose.model, view, projection, nullptr, &womanPose);
+            DrawObject(*guiaMan, environmentShader, manPose.model, view, projection, nullptr, &manPose);
+        }
         if (lagunaAlmas.Configured())
             for (size_t row = 0; row < LagunaAlmas::RowCount; ++row)
                 for (size_t i = 0; i < LagunaAlmas::Count; ++i)

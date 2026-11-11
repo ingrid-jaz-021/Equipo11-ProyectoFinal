@@ -1,6 +1,6 @@
 # Inventario de animaciones activas
 
-**Total: 17 tipos = 14 clips esqueléticos + 3 efectos animados independientes.**
+**Total: 18 tipos = 14 clips esqueléticos + 4 efectos animados independientes.**
 
 Criterio: cada clip cargado y utilizado por C++ cuenta como un tipo, incluidos
 los reposos. Las fases internas de un mismo clip no se cuentan de nuevo.
@@ -14,7 +14,8 @@ los reposos. Las fases internas de un mismo clip no se cuentan de nuevo.
 | Pan de muerto | 1 | Reducción progresiva de escala mientras el NPC come. |
 | Agua de la laguna | 1 | Desplazamiento UV y ondulación del shader, como un único efecto de agua. |
 | Flecha del bote | 1 | Oscilación vertical senoidal. |
-| **Total** | **17** | **14 clips + 3 efectos.** |
+| Guías antorcha | 1 | Marcha procedural sin esqueleto: piernas alternas, rebote y recorrido de ida y vuelta por los tapetes. |
+| **Total** | **18** | **14 clips + 4 efectos.** |
 
 La Luna permanece fija; su esfera y su iluminación no agregan una animación.
 Las cámaras, el seguimiento de la mascota y la navegación del bote son sistemas
