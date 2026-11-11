@@ -51,6 +51,7 @@ public:
         if (!foundWalkway || walkwayHi.z - walkwayLo.z < walkwayHi.x - walkwayLo.x)
             throw std::runtime_error("Los tapetes no definen un recorrido longitudinal por el Pasillo.");
 
+        sourceX = (entryLo.x + entryHi.x) * 0.5f;
         walkwayCenterX = (walkwayLo.x + walkwayHi.x) * 0.5f;
         walkwayMinX = walkwayLo.x;
         walkwayMaxX = walkwayHi.x;
@@ -80,9 +81,7 @@ public:
         startZ = glm::clamp(startZ, minCenterZ, maxCenterZ);
         endZ = directionZ < 0.0f ? minCenterZ : maxCenterZ;
         routeLength = std::abs(endZ - startZ) * worldScale;
-        // En la referencia los modelos quedan lado a lado con una separación
-        // entre centros de aproximadamente 0.8 veces su altura.
-        lateralSpacing = targetHeight * 0.8f;
+        lateralSpacing = targetHeight * 0.55f;
         if (routeLength <= targetHeight * 1.5f || (endZ - startZ) * directionZ <= 0.0f)
             throw std::runtime_error("No hay espacio suficiente despues del arco para el recorrido de los guias.");
 
@@ -116,10 +115,7 @@ public:
 
         float floor = floorHint;
         const float lateral = (index == 0 ? -0.5f : 0.5f) * lateralSpacing;
-        const float halfWidth = (figure.boundsMax.x - figure.boundsMin.x) * figure.scale /
-            (2.0f * worldScale);
-        const float guideX = glm::clamp(walkwayCenterX + lateral / worldScale,
-            walkwayMinX + halfWidth, walkwayMaxX - halfWidth);
+        const float guideX = glm::clamp(walkwayCenterX + lateral, walkwayMinX, walkwayMaxX);
         ground->SampleCharacter(guideX, sourceZ, floorHint, floor,
             (figure.boundsMax.x - figure.boundsMin.x) * figure.scale / worldScale * 0.12f, 100.0f);
         glm::vec3 position((guideX - sourceOrigin.x) * worldScale,
@@ -162,6 +158,7 @@ private:
     const GroundSurface* ground = nullptr;
     glm::vec3 sourceOrigin = glm::vec3(0.0f);
     float worldScale = 1.0f;
+    float sourceX = 0.0f;
     float walkwayCenterX = 0.0f;
     float walkwayMinX = 0.0f;
     float walkwayMaxX = 0.0f;
