@@ -732,7 +732,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     Skybox skybox;
     UpdateWindowTitle(window);
     firstMouse = true;
-    // if (!validate) glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    if (!validate) glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     skyboxShader.Use();
     glUniform1i(skyboxShader.Uniform("skybox"), 0);
     const GLint skyView = skyboxShader.Uniform("view");
