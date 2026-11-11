@@ -30,6 +30,7 @@
 #include "LagunaAlmas.h"
 #include "GuiaAntorchas.h"
 #include "OfrendaLighting.h"
+#include "FuegoCamino.h"
 #include "TreeVegetation.h"
 #include "ZocaloBackdrop.h"
 #include "WaterSurface.h"
@@ -665,6 +666,8 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     std::unique_ptr<Model> mujerBrazoDerModel;
     std::unique_ptr<Model> mujerBrazoIzqModel;
     GuiaAntorchas guiaAntorchas;
+    std::unique_ptr<Model> fuegoCaminoModel;
+    FuegoCamino fuegoCamino;
     glfwSetWindowTitle(window, "Cargando rig del Xolotl...");
     lagunaDancerModel = std::make_unique<Model>("Models/EntornoCompleto/Laguna/Xolotl/XolotlDanza.xanim",keepLoading);
     const auto skeletalClips=girl.Animator()->ClipCount()+dog.Animator()->ClipCount()+npcModel.Animator()->ClipCount()+axoloteModel.Animator()->ClipCount();
@@ -702,6 +705,10 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         mujerBrazoDerModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA_BrazoDer.obj", keepLoading);
         mujerBrazoIzqModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA_BrazoIzq.obj", keepLoading);
         guiaAntorchas.Configure(*environment, *hombreCuerpoModel, *mujerCuerpoModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
+        glfwSetWindowTitle(window, "Cargando fuego del camino...");
+        fuegoCaminoModel = std::make_unique<Model>("Models/Fuego camino/fuego_camino.obj", keepLoading);
+        fuegoCamino.Build(&ground, SOURCE_SPAWN, ENVIRONMENT_SCALE);
+        if (validate) fuegoCamino.Validate();
     }
     SolidObstacles doors;
     if(environment){doors.Build(*environment,SOURCE_SPAWN,ENVIRONMENT_SCALE);if(validate)doors.Validate(ground,SOURCE_SPAWN,ENVIRONMENT_SCALE);activeDoors=&doors;}
@@ -1043,6 +1050,13 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             navigation->DrawShore(environmentShader,view,projection);
             DrawObject(boatModel,environmentShader,navigation->ModelMatrix(),view,projection);
             navigation->DrawMarker(environmentShader,view,projection,now);
+            if (fuegoCaminoModel && fuegoCamino.Configured())
+            {
+                for (const auto& m : fuegoCamino.Matrices())
+                {
+                    DrawObject(*fuegoCaminoModel, environmentShader, m, view, projection);
+                }
+            }
         }
         DrawObject(axoloteModel,characterShader,axolote.ModelMatrix(),view,projection,&axolote);
         DrawObject(basketModel,environmentShader,npc.BasketMatrix(),view,projection);
