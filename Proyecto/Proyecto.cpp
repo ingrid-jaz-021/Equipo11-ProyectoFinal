@@ -29,6 +29,7 @@
 #include "LagunaDancer.h"
 #include "LagunaAlmas.h"
 #include "GuiaAntorchas.h"
+#include "OfrendaLighting.h"
 #include "TreeVegetation.h"
 #include "ZocaloBackdrop.h"
 #include "WaterSurface.h"
@@ -584,6 +585,9 @@ void SetLighting(const Shader& shader,const MoonSky& moon)
     shader.Use();
     glUniform1i(shader.Uniform("texture_diffuse1"), 0);
     glUniform1i(shader.Uniform("torchLightCount"), 0);
+    glUniform1i(shader.Uniform("ofrendaLightCount"), 0);
+    glUniform4f(shader.Uniform("ofrendaCandleRegion"), 0.0f, 0.0f, 0.0f, 0.0f);
+    glUniform3f(shader.Uniform("ofrendaCandleColor"), 0.0f, 0.0f, 0.0f);
     moon.UploadLighting(shader);
 }
 void SetValidationCamera(const glm::vec3& eye, const glm::vec3& target)
@@ -717,6 +721,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     for(const auto& lamp:plazaLights.instances)lampModels.push_back(lamp.model);
     std::cout << "Zocalo: 12 farolas (8 interiores y 4 exteriores), focos alineados con su cristal." << std::endl;
     LagunaSpotLighting lagoonLights;
+    OfrendaLighting ofrendaLights;
     if (environment)
     {
         lagoonLights.Build(*environment, SOURCE_SPAWN, ENVIRONMENT_SCALE);
@@ -724,6 +729,12 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         lagoonLights.Upload(environmentShader);
         lagoonLights.Upload(characterShader);
         lagoonLights.Upload(lampShader);
+
+        ofrendaLights.Build(environment.get(), SOURCE_SPAWN, ENVIRONMENT_SCALE);
+        if (validate) ofrendaLights.Validate();
+        ofrendaLights.Upload(environmentShader, 0.0f);
+        ofrendaLights.Upload(characterShader, 0.0f);
+        ofrendaLights.Upload(lampShader, 0.0f);
     }
     std::unique_ptr<AlphaBillboards> billboards;
     std::unique_ptr<TreeVegetation> vegetation;
@@ -876,6 +887,12 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
                 const glm::vec3 eye = (glm::vec3(-115.0f, 4.2f, 226.0f) - SOURCE_SPAWN) * ENVIRONMENT_SCALE;
                 SetValidationCamera(eye, target);
             }
+            if (frame == 155)
+            {
+                const glm::vec3 target(-464.0f, 18.0f, -985.0f);
+                const glm::vec3 eye(-464.0f, 140.0f, -680.0f);
+                SetValidationCamera(eye, target);
+            }
             if(frame==200)
                 SetValidationCamera(backdrop->Center()+glm::vec3(1300,1150,-1300),backdrop->Center());
             if(frame==210||frame==220||frame==230)
@@ -1005,6 +1022,12 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             guiaAntorchas.UploadTorchLights(characterShader, static_cast<float>(now));
             guiaAntorchas.UploadTorchLights(lampShader, static_cast<float>(now));
         }
+        if (ofrendaLights.Configured())
+        {
+            ofrendaLights.Upload(environmentShader, static_cast<float>(now));
+            ofrendaLights.Upload(characterShader, static_cast<float>(now));
+            ofrendaLights.Upload(lampShader, static_cast<float>(now));
+        }
         if (environment)
         {
             glm::mat4 model = glm::translate(glm::mat4(1), ENVIRONMENT_TRANSLATION);
@@ -1066,7 +1089,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             if(showDialogue!=dialogueApproachTest)throw std::runtime_error("El dialogo no aparece/desaparece por proximidad real de la nina.");
             if(showDialogue)++dialogueNearSamples;else ++dialogueFarSamples;
         }
-        if (validate && (frame==moonFrame || captureAxolote || captureNpc || captureBoat || captureAction || frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 305 || frame == 310 || frame == 315 || frame == 320 || frame == 325 || frame == 330 || frame == 335 || frame == 350 || frame == 390 || frame == 775))
+        if (validate && (frame==moonFrame || captureAxolote || captureNpc || captureBoat || captureAction || frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || frame == 155 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 305 || frame == 310 || frame == 315 || frame == 320 || frame == 325 || frame == 330 || frame == 335 || frame == 350 || frame == 390 || frame == 775))
         {
             std::vector<float> depth(static_cast<size_t>(width) * height);
             glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, depth.data());
