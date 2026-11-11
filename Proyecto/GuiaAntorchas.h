@@ -6,6 +6,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "Model.h"
 #include "GroundSurface.h"
+#include "Shader.h"
 
 // Control de los dos Guias con Antorcha utilizando Modelado Jerarquico Articulado
 // (Cinematica Directa) con extremidades independientes (torso, brazo derecho que se balancea
@@ -518,6 +519,50 @@ public:
         m = glm::translate(m, mujerLeftShoulder);
         m = glm::rotate(m, glm::radians(torchBobPitch), glm::vec3(1.0f, 0.0f, 0.0f));
         return m;
+    }
+
+    // Posiciones en el mundo de las llamas de las antorchas para fuentes de luz puntual
+    glm::vec3 TorchLightPositionHombre() const
+    {
+        const glm::vec4 p = HombreBrazoIzqMatrix() * glm::vec4(-0.59f, 3.26f, -1.99f, 1.0f);
+        return glm::vec3(p) / (p.w != 0.0f ? p.w : 1.0f);
+    }
+
+    glm::vec3 TorchLightPositionMujer() const
+    {
+        const glm::vec4 p = MujerBrazoIzqMatrix() * glm::vec4(-0.19f, 3.35f, -3.21f, 1.0f);
+        return glm::vec3(p) / (p.w != 0.0f ? p.w : 1.0f);
+    }
+
+    // Actualiza las luces puntuales dinamicas (point lights) calidas/fuego con parpadeo organico
+    void UploadTorchLights(const Shader& shader, float now) const
+    {
+        if (!configured) return;
+        shader.Use();
+
+        // Parpadeo organico del fuego mediante combinacion de frecuencias
+        const float flickerH = 0.12f * std::sin(now * 15.3f) + 0.07f * std::sin(now * 27.7f) + 0.04f * std::cos(now * 41.1f);
+        const float flickerM = 0.12f * std::sin(now * 17.1f + 1.5f) + 0.07f * std::sin(now * 31.3f) + 0.04f * std::cos(now * 43.7f);
+
+        // Color fuego calido (luz ambar/dorada)
+        const glm::vec3 baseFireColor(1.0f, 0.58f, 0.16f);
+        const glm::vec3 colorHombre = baseFireColor * (1.65f + flickerH);
+        const glm::vec3 colorMujer  = baseFireColor * (1.65f + flickerM);
+
+        constexpr float range = 24.0f; // Alcance para iluminar el suelo de aserrin y los personajes
+
+        const glm::vec3 posHombre = TorchLightPositionHombre();
+        const glm::vec3 posMujer  = TorchLightPositionMujer();
+
+        glUniform1i(shader.Uniform("torchLightCount"), 2);
+
+        glUniform3fv(shader.Uniform("torchLights[0].position"), 1, &posHombre[0]);
+        glUniform3fv(shader.Uniform("torchLights[0].color"), 1, &colorHombre[0]);
+        glUniform1f(shader.Uniform("torchLights[0].range"), range);
+
+        glUniform3fv(shader.Uniform("torchLights[1].position"), 1, &posMujer[0]);
+        glUniform3fv(shader.Uniform("torchLights[1].color"), 1, &colorMujer[0]);
+        glUniform1f(shader.Uniform("torchLights[1].range"), range);
     }
 
     bool Configured() const { return configured; }

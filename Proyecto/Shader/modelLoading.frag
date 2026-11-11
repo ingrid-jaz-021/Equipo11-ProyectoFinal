@@ -35,6 +35,8 @@ uniform int pointLightCount;
 uniform vec4 pointLightRegion;
 uniform SpotLight spotLights[32];
 uniform int spotLightCount;
+uniform PointLight torchLights[2];
+uniform int torchLightCount;
 void main()
 {
     vec4 albedo = vec4(material.diffuseColor, material.opacity);
@@ -80,6 +82,20 @@ void main()
         float attenuation = (1.0 - smoothstep(0.72, 1.0, normalizedDistance)) /
             (1.0 + 1.5 * normalizedDistance + 4.0 * normalizedDistance * normalizedDistance);
         illumination += spotLights[i].color * surface * cone * attenuation;
+    }
+    // Luces puntuales de las antorchas (fuego calido que ilumina a los guias y el pasillo)
+    for (int i = 0; i < min(torchLightCount, 2); ++i)
+    {
+        vec3 delta = torchLights[i].position - WorldPosition;
+        float distanceSquared = dot(delta, delta);
+        float radius = torchLights[i].range;
+        if (distanceSquared >= radius * radius) continue;
+        float distanceToLight = sqrt(max(distanceSquared, 0.0001));
+        vec3 direction = delta / distanceToLight;
+        float normalizedDistance = distanceToLight / radius;
+        float cutoff = 1.0 - smoothstep(0.60, 1.0, normalizedDistance);
+        float attenuation = cutoff / (1.0 + 1.2 * normalizedDistance + 3.0 * normalizedDistance * normalizedDistance);
+        illumination += torchLights[i].color * max(dot(normal, direction), 0.0) * attenuation;
     }
     FragColor = vec4(albedo.rgb * illumination + material.emissiveColor, 1.0);
 }

@@ -583,6 +583,7 @@ void SetLighting(const Shader& shader,const MoonSky& moon)
 {
     shader.Use();
     glUniform1i(shader.Uniform("texture_diffuse1"), 0);
+    glUniform1i(shader.Uniform("torchLightCount"), 0);
     moon.UploadLighting(shader);
 }
 void SetValidationCamera(const glm::vec3& eye, const glm::vec3& target)
@@ -998,6 +999,12 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         const float fov = cameraMode == CameraMode::Free ? freeCamera.GetZoom() : 45.0f;
         const glm::mat4 projection = glm::perspective(glm::radians(fov), static_cast<float>(width) / height,
             0.02f * ENVIRONMENT_SCALE, std::max(moon.FarPlane(eye),std::max(10000.0f,sceneDiagonal*1.5f+glm::length(eye))));
+        if (guiaAntorchas.Configured())
+        {
+            guiaAntorchas.UploadTorchLights(environmentShader, static_cast<float>(now));
+            guiaAntorchas.UploadTorchLights(characterShader, static_cast<float>(now));
+            guiaAntorchas.UploadTorchLights(lampShader, static_cast<float>(now));
+        }
         if (environment)
         {
             glm::mat4 model = glm::translate(glm::mat4(1), ENVIRONMENT_TRANSLATION);
