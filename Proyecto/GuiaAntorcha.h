@@ -52,6 +52,9 @@ public:
             throw std::runtime_error("Los tapetes no definen un recorrido longitudinal por el Pasillo.");
 
         sourceX = (entryLo.x + entryHi.x) * 0.5f;
+        walkwayCenterX = (walkwayLo.x + walkwayHi.x) * 0.5f;
+        walkwayMinX = walkwayLo.x;
+        walkwayMaxX = walkwayHi.x;
         directionZ = (walkwayLo.z + walkwayHi.z) * 0.5f < entryHi.z ? -1.0f : 1.0f;
         const float targetHeight = MovementSettings::CharacterHeight * worldScale;
         const std::array<const Model*, Count> models = {&woman, &man};
@@ -78,8 +81,8 @@ public:
         startZ = glm::clamp(startZ, minCenterZ, maxCenterZ);
         endZ = directionZ < 0.0f ? minCenterZ : maxCenterZ;
         routeLength = std::abs(endZ - startZ) * worldScale;
-        spacing = targetHeight * 1.25f;
-        if (routeLength <= spacing * 1.5f || (endZ - startZ) * directionZ <= 0.0f)
+        lateralSpacing = targetHeight * 0.55f;
+        if (routeLength <= targetHeight * 1.5f || (endZ - startZ) * directionZ <= 0.0f)
             throw std::runtime_error("No hay espacio suficiente despues del arco para el recorrido de los guias.");
 
         this->ground = &ground;
@@ -89,7 +92,7 @@ public:
         speed = worldScale * MovementSettings::WalkSpeed;
         configured = true;
 
-        std::cout << "Guias Antorcha: Hombre y Mujer listos despues del arco; recorrido de ida y vuelta por los tapetes, "
+        std::cout << "Guias Antorcha: Hombre y Mujer listos despues del arco, lado a lado; recorrido de ida y vuelta por los tapetes, "
             << "marcha procedural sin esqueleto." << std::endl;
     }
 
@@ -102,7 +105,7 @@ public:
     {
         if (!configured || index >= Count) return {};
         const auto& figure = figures[index];
-        const float distance = elapsed * speed + (index == 0 ? spacing : 0.0f);
+        const float distance = elapsed * speed;
         const float cycleLength = routeLength * 2.0f;
         const float cycleDistance = std::fmod(distance, cycleLength);
         const bool returning = cycleDistance > routeLength;
@@ -111,9 +114,11 @@ public:
         const float sourceZ = startZ + directionZ * along / worldScale;
 
         float floor = floorHint;
-        ground->SampleCharacter(sourceX, sourceZ, floorHint, floor,
+        const float lateral = (index == 0 ? -0.5f : 0.5f) * lateralSpacing;
+        const float guideX = glm::clamp(walkwayCenterX + lateral, walkwayMinX, walkwayMaxX);
+        ground->SampleCharacter(guideX, sourceZ, floorHint, floor,
             (figure.boundsMax.x - figure.boundsMin.x) * figure.scale / worldScale * 0.12f, 100.0f);
-        glm::vec3 position((sourceX - sourceOrigin.x) * worldScale,
+        glm::vec3 position((guideX - sourceOrigin.x) * worldScale,
             (floor - sourceOrigin.y) * worldScale,
             (sourceZ - sourceOrigin.z) * worldScale);
 
@@ -133,7 +138,7 @@ public:
 
     void Validate() const
     {
-        if (!configured || routeLength <= spacing * 1.5f)
+        if (!configured || routeLength <= figures[0].height * 1.5f)
             throw std::runtime_error("Los Guias Antorcha no quedaron configurados sobre los tapetes.");
         std::cout << "Guias Antorcha OK: recorrido libre de ida y vuelta, con marcha alterna." << std::endl;
     }
@@ -154,13 +159,17 @@ private:
     glm::vec3 sourceOrigin = glm::vec3(0.0f);
     float worldScale = 1.0f;
     float sourceX = 0.0f;
+    float walkwayCenterX = 0.0f;
+    float walkwayMinX = 0.0f;
+    float walkwayMaxX = 0.0f;
     float startZ = 0.0f;
     float endZ = 0.0f;
     float directionZ = -1.0f;
     float routeLength = 0.0f;
-    float spacing = 0.0f;
+    float lateralSpacing = 0.0f;
     float speed = 0.0f;
     float floorHint = 0.0f;
     float elapsed = 0.0f;
     bool configured = false;
 };
+
