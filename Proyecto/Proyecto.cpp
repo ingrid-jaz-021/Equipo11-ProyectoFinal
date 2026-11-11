@@ -653,8 +653,12 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     std::unique_ptr<Model> lagunaDancerModel;
     LagunaDancer lagunaDancer;
     LagunaAlmas lagunaAlmas;
-    std::unique_ptr<Model> hombreGuiaModel;
-    std::unique_ptr<Model> mujerGuiaModel;
+    std::unique_ptr<Model> hombreCuerpoModel;
+    std::unique_ptr<Model> hombreBrazoDerModel;
+    std::unique_ptr<Model> hombreBrazoIzqModel;
+    std::unique_ptr<Model> mujerCuerpoModel;
+    std::unique_ptr<Model> mujerBrazoDerModel;
+    std::unique_ptr<Model> mujerBrazoIzqModel;
     GuiaAntorchas guiaAntorchas;
     glfwSetWindowTitle(window, "Cargando rig del Xolotl...");
     lagunaDancerModel = std::make_unique<Model>("Models/EntornoCompleto/Laguna/Xolotl/XolotlDanza.xanim",keepLoading);
@@ -686,9 +690,13 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         lagunaDancer.Configure(*environment, *lagunaDancerModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
         lagunaAlmas.Configure(*environment, almaModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
         glfwSetWindowTitle(window, "Cargando guias con antorcha...");
-        hombreGuiaModel = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA.obj", keepLoading);
-        mujerGuiaModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA.obj", keepLoading);
-        guiaAntorchas.Configure(*environment, *hombreGuiaModel, *mujerGuiaModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
+        hombreCuerpoModel = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA_Cuerpo.obj", keepLoading);
+        hombreBrazoDerModel = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA_BrazoDer.obj", keepLoading);
+        hombreBrazoIzqModel = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA_BrazoIzq.obj", keepLoading);
+        mujerCuerpoModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA_Cuerpo.obj", keepLoading);
+        mujerBrazoDerModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA_BrazoDer.obj", keepLoading);
+        mujerBrazoIzqModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA_BrazoIzq.obj", keepLoading);
+        guiaAntorchas.Configure(*environment, *hombreCuerpoModel, *mujerCuerpoModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
     }
     SolidObstacles doors;
     if(environment){doors.Build(*environment,SOURCE_SPAWN,ENVIRONMENT_SCALE);if(validate)doors.Validate(ground,SOURCE_SPAWN,ENVIRONMENT_SCALE);activeDoors=&doors;}
@@ -834,6 +842,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         npc.UpdateNpc(dt);
         axolote.UpdateGreeting(dt);
         axolote.UpdateProximity(player.position,!navigation||!navigation->IsNavigating());
+        guiaAntorchas.Update(dt, player.position, environment ? &ground : nullptr);
         bool dialogueApproachTest=false;glm::vec3 savedDialoguePosition(0);
         if (validate && environment)
         {
@@ -1011,10 +1020,17 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             for (size_t row = 0; row < LagunaAlmas::RowCount; ++row)
                 for (size_t i = 0; i < LagunaAlmas::Count; ++i)
                     DrawObject(almaModel, environmentShader, lagunaAlmas.ModelMatrix(almaModel, i, row), view, projection);
-        if (guiaAntorchas.Configured() && hombreGuiaModel && mujerGuiaModel)
+        if (guiaAntorchas.Configured() && hombreCuerpoModel && mujerCuerpoModel)
         {
-            DrawObject(*hombreGuiaModel, environmentShader, guiaAntorchas.HombreMatrix(), view, projection);
-            DrawObject(*mujerGuiaModel, environmentShader, guiaAntorchas.MujerMatrix(), view, projection);
+            // Hombre: Torso base, Brazo Derecho articulado oscilando al costado, Brazo Izquierdo estirado al frente con antorcha
+            DrawObject(*hombreCuerpoModel, environmentShader, guiaAntorchas.HombreCuerpoMatrix(), view, projection);
+            if (hombreBrazoDerModel) DrawObject(*hombreBrazoDerModel, environmentShader, guiaAntorchas.HombreBrazoDerMatrix(), view, projection);
+            if (hombreBrazoIzqModel) DrawObject(*hombreBrazoIzqModel, environmentShader, guiaAntorchas.HombreBrazoIzqMatrix(), view, projection);
+
+            // Mujer: Torso base, Brazo Derecho articulado oscilando al costado, Brazo Izquierdo estirado al frente con antorcha
+            DrawObject(*mujerCuerpoModel, environmentShader, guiaAntorchas.MujerCuerpoMatrix(), view, projection);
+            if (mujerBrazoDerModel) DrawObject(*mujerBrazoDerModel, environmentShader, guiaAntorchas.MujerBrazoDerMatrix(), view, projection);
+            if (mujerBrazoIzqModel) DrawObject(*mujerBrazoIzqModel, environmentShader, guiaAntorchas.MujerBrazoIzqMatrix(), view, projection);
         }
         moon.Draw(view,projection,eye);
         if(water)water->Draw(view,projection,eye,now);
