@@ -36,6 +36,15 @@ public:
         const auto delta=girl-npc;
         return glm::dot(glm::vec2(delta.x,delta.z),glm::vec2(delta.x,delta.z))<=4.5f*scale*4.5f*scale&&std::abs(delta.y)<=3.0f*scale;
     }
+    static bool IsOfrendaNearby(const glm::vec3& pos)
+    {
+        // Acceso central frontal a la ofrenda de las mil luces:
+        // Eje X: -463.5f (en medio del pasillo y cruz de la ofrenda)
+        // Eje Z: -812.0f (frente de la plataforma)
+        const float dx = pos.x - (-463.5f);
+        const float dz = pos.z - (-812.0f);
+        return (std::abs(dx) <= 65.0f) && (std::abs(dz) <= 75.0f);
+    }
     void Draw(bool visible,int width,int height) const
     {
         if(visible)DrawPanel(0,width,height);

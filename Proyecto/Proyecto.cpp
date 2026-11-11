@@ -28,6 +28,9 @@
 #include "LagunaSpotLighting.h"
 #include "LagunaDancer.h"
 #include "LagunaAlmas.h"
+#include "GuiaAntorchas.h"
+#include "OfrendaLighting.h"
+#include "FuegoCamino.h"
 #include "TreeVegetation.h"
 #include "ZocaloBackdrop.h"
 #include "WaterSurface.h"
@@ -582,6 +585,10 @@ void SetLighting(const Shader& shader,const MoonSky& moon)
 {
     shader.Use();
     glUniform1i(shader.Uniform("texture_diffuse1"), 0);
+    glUniform1i(shader.Uniform("torchLightCount"), 0);
+    glUniform1i(shader.Uniform("ofrendaLightCount"), 0);
+    glUniform4f(shader.Uniform("ofrendaCandleRegion"), 0.0f, 0.0f, 0.0f, 0.0f);
+    glUniform3f(shader.Uniform("ofrendaCandleColor"), 0.0f, 0.0f, 0.0f);
     moon.UploadLighting(shader);
 }
 void SetValidationCamera(const glm::vec3& eye, const glm::vec3& target)
@@ -652,6 +659,15 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     std::unique_ptr<Model> lagunaDancerModel;
     LagunaDancer lagunaDancer;
     LagunaAlmas lagunaAlmas;
+    std::unique_ptr<Model> hombreCuerpoModel;
+    std::unique_ptr<Model> hombreBrazoDerModel;
+    std::unique_ptr<Model> hombreBrazoIzqModel;
+    std::unique_ptr<Model> mujerCuerpoModel;
+    std::unique_ptr<Model> mujerBrazoDerModel;
+    std::unique_ptr<Model> mujerBrazoIzqModel;
+    GuiaAntorchas guiaAntorchas;
+    std::unique_ptr<Model> fuegoCaminoModel;
+    FuegoCamino fuegoCamino;
     glfwSetWindowTitle(window, "Cargando rig del Xolotl...");
     lagunaDancerModel = std::make_unique<Model>("Models/EntornoCompleto/Laguna/Xolotl/XolotlDanza.xanim",keepLoading);
     const auto skeletalClips=girl.Animator()->ClipCount()+dog.Animator()->ClipCount()+npcModel.Animator()->ClipCount()+axoloteModel.Animator()->ClipCount();
@@ -681,6 +697,18 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         if (validate) { environment->ValidateLayout(); ValidateSceneGrass(ground); ValidatePasilloGround(ground); }
         lagunaDancer.Configure(*environment, *lagunaDancerModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
         lagunaAlmas.Configure(*environment, almaModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
+        glfwSetWindowTitle(window, "Cargando guias con antorcha...");
+        hombreCuerpoModel = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA_Cuerpo.obj", keepLoading);
+        hombreBrazoDerModel = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA_BrazoDer.obj", keepLoading);
+        hombreBrazoIzqModel = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA_BrazoIzq.obj", keepLoading);
+        mujerCuerpoModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA_Cuerpo.obj", keepLoading);
+        mujerBrazoDerModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA_BrazoDer.obj", keepLoading);
+        mujerBrazoIzqModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA_BrazoIzq.obj", keepLoading);
+        guiaAntorchas.Configure(*environment, *hombreCuerpoModel, *mujerCuerpoModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
+        glfwSetWindowTitle(window, "Cargando fuego del camino...");
+        fuegoCaminoModel = std::make_unique<Model>("Models/Fuego camino/fuego_camino.obj", keepLoading);
+        fuegoCamino.Build(&ground, SOURCE_SPAWN, ENVIRONMENT_SCALE);
+        if (validate) fuegoCamino.Validate();
     }
     SolidObstacles doors;
     if(environment){doors.Build(*environment,SOURCE_SPAWN,ENVIRONMENT_SCALE);if(validate)doors.Validate(ground,SOURCE_SPAWN,ENVIRONMENT_SCALE);activeDoors=&doors;}
@@ -689,6 +717,11 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     KioskNpc npc;npc.ConfigureNpc(npcModel,breadModel,environment.get(),SOURCE_SPAWN,ENVIRONMENT_SCALE);
     if(validate)npc.Validate();
     NpcDialogue dialogue;
+    std::unique_ptr<NpcDialogue> ofrendaDialogue;
+    if (environment)
+    {
+        ofrendaDialogue = std::make_unique<NpcDialogue>(std::vector<std::string>{ "images/OfrendaInfo.png" });
+    }
     Model lamp("Models/Farola/Farola.obj", keepLoading,{nullptr,false,{"Material.001"}});
     ZocaloLighting plazaLights;
     plazaLights.Build(lamp, environment.get(), ground, SOURCE_SPAWN, ENVIRONMENT_SCALE);
@@ -700,6 +733,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     for(const auto& lamp:plazaLights.instances)lampModels.push_back(lamp.model);
     std::cout << "Zocalo: 12 farolas (8 interiores y 4 exteriores), focos alineados con su cristal." << std::endl;
     LagunaSpotLighting lagoonLights;
+    OfrendaLighting ofrendaLights;
     if (environment)
     {
         lagoonLights.Build(*environment, SOURCE_SPAWN, ENVIRONMENT_SCALE);
@@ -707,6 +741,19 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         lagoonLights.Upload(environmentShader);
         lagoonLights.Upload(characterShader);
         lagoonLights.Upload(lampShader);
+
+        ofrendaLights.Build(environment.get(), SOURCE_SPAWN, ENVIRONMENT_SCALE);
+        if (validate) ofrendaLights.Validate();
+        ofrendaLights.Upload(environmentShader, 0.0f);
+        ofrendaLights.Upload(characterShader, 0.0f);
+        ofrendaLights.Upload(lampShader, 0.0f);
+
+        if (fuegoCamino.Configured())
+        {
+            fuegoCamino.UploadLights(environmentShader, 0.0f);
+            fuegoCamino.UploadLights(characterShader, 0.0f);
+            fuegoCamino.UploadLights(lampShader, 0.0f);
+        }
     }
     std::unique_ptr<AlphaBillboards> billboards;
     std::unique_ptr<TreeVegetation> vegetation;
@@ -755,7 +802,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     double previous = glfwGetTime();
     FrameProfiler profiler(profiling);
     int frame = 0;
-    unsigned dialogueNearSamples=0,dialogueFarSamples=0,axoloteDialogueSamples=0;
+    unsigned dialogueNearSamples=0,dialogueFarSamples=0,axoloteDialogueSamples=0,ofrendaDialogueSamples=0;
     glm::vec3 pausedBoat(0);std::vector<glm::mat4> pausedHuman,pausedDog;
     while (!glfwWindowShouldClose(window))
     {
@@ -826,6 +873,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         npc.UpdateNpc(dt);
         axolote.UpdateGreeting(dt);
         axolote.UpdateProximity(player.position,!navigation||!navigation->IsNavigating());
+        guiaAntorchas.Update(dt, player.position, environment ? &ground : nullptr);
         bool dialogueApproachTest=false;glm::vec3 savedDialoguePosition(0);
         if (validate && environment)
         {
@@ -854,8 +902,16 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
                 glm::vec3 min, max;
                 if (!environment->GetMaterialBounds("Arco_Ofrenda.001", min, max))
                     throw std::runtime_error("Falta el arco del Pasillo.");
-                const glm::vec3 center = ((min + max) * 0.5f - SOURCE_SPAWN) * ENVIRONMENT_SCALE;
-                SetValidationCamera(center + glm::vec3(160, 25, 160), center);
+                const glm::vec3 target = (glm::vec3(-115.0f, 3.5f, 242.0f) - SOURCE_SPAWN) * ENVIRONMENT_SCALE;
+                const glm::vec3 eye = (glm::vec3(-115.0f, 4.2f, 226.0f) - SOURCE_SPAWN) * ENVIRONMENT_SCALE;
+                SetValidationCamera(eye, target);
+            }
+            if (frame == 155)
+            {
+                const glm::vec3 target(-464.0f, 18.0f, -985.0f);
+                const glm::vec3 eye(-464.0f, 140.0f, -680.0f);
+                SetValidationCamera(eye, target);
+                player.position = glm::vec3(-463.5f, 0.0f, -800.0f);
             }
             if(frame==200)
                 SetValidationCamera(backdrop->Center()+glm::vec3(1300,1150,-1300),backdrop->Center());
@@ -980,6 +1036,24 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         const float fov = cameraMode == CameraMode::Free ? freeCamera.GetZoom() : 45.0f;
         const glm::mat4 projection = glm::perspective(glm::radians(fov), static_cast<float>(width) / height,
             0.02f * ENVIRONMENT_SCALE, std::max(moon.FarPlane(eye),std::max(10000.0f,sceneDiagonal*1.5f+glm::length(eye))));
+        if (guiaAntorchas.Configured())
+        {
+            guiaAntorchas.UploadTorchLights(environmentShader, static_cast<float>(now));
+            guiaAntorchas.UploadTorchLights(characterShader, static_cast<float>(now));
+            guiaAntorchas.UploadTorchLights(lampShader, static_cast<float>(now));
+        }
+        if (ofrendaLights.Configured())
+        {
+            ofrendaLights.Upload(environmentShader, static_cast<float>(now));
+            ofrendaLights.Upload(characterShader, static_cast<float>(now));
+            ofrendaLights.Upload(lampShader, static_cast<float>(now));
+        }
+        if (fuegoCamino.Configured())
+        {
+            fuegoCamino.UploadLights(environmentShader, static_cast<float>(now));
+            fuegoCamino.UploadLights(characterShader, static_cast<float>(now));
+            fuegoCamino.UploadLights(lampShader, static_cast<float>(now));
+        }
         if (environment)
         {
             glm::mat4 model = glm::translate(glm::mat4(1), ENVIRONMENT_TRANSLATION);
@@ -989,6 +1063,13 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             navigation->DrawShore(environmentShader,view,projection);
             DrawObject(boatModel,environmentShader,navigation->ModelMatrix(),view,projection);
             navigation->DrawMarker(environmentShader,view,projection,now);
+            if (fuegoCaminoModel && fuegoCamino.Configured())
+            {
+                for (const auto& m : fuegoCamino.Matrices())
+                {
+                    DrawObject(*fuegoCaminoModel, environmentShader, m, view, projection);
+                }
+            }
         }
         DrawObject(axoloteModel,characterShader,axolote.ModelMatrix(),view,projection,&axolote);
         DrawObject(basketModel,environmentShader,npc.BasketMatrix(),view,projection);
@@ -1002,6 +1083,18 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             for (size_t row = 0; row < LagunaAlmas::RowCount; ++row)
                 for (size_t i = 0; i < LagunaAlmas::Count; ++i)
                     DrawObject(almaModel, environmentShader, lagunaAlmas.ModelMatrix(almaModel, i, row), view, projection);
+        if (guiaAntorchas.Configured() && hombreCuerpoModel && mujerCuerpoModel)
+        {
+            // Hombre: Torso base, Brazo Derecho articulado oscilando al costado, Brazo Izquierdo estirado al frente con antorcha
+            DrawObject(*hombreCuerpoModel, environmentShader, guiaAntorchas.HombreCuerpoMatrix(), view, projection);
+            if (hombreBrazoDerModel) DrawObject(*hombreBrazoDerModel, environmentShader, guiaAntorchas.HombreBrazoDerMatrix(), view, projection);
+            if (hombreBrazoIzqModel) DrawObject(*hombreBrazoIzqModel, environmentShader, guiaAntorchas.HombreBrazoIzqMatrix(), view, projection);
+
+            // Mujer: Torso base, Brazo Derecho articulado oscilando al costado, Brazo Izquierdo estirado al frente con antorcha
+            DrawObject(*mujerCuerpoModel, environmentShader, guiaAntorchas.MujerCuerpoMatrix(), view, projection);
+            if (mujerBrazoDerModel) DrawObject(*mujerBrazoDerModel, environmentShader, guiaAntorchas.MujerBrazoDerMatrix(), view, projection);
+            if (mujerBrazoIzqModel) DrawObject(*mujerBrazoIzqModel, environmentShader, guiaAntorchas.MujerBrazoIzqMatrix(), view, projection);
+        }
         moon.Draw(view,projection,eye);
         if(water)water->Draw(view,projection,eye,now);
         glDepthFunc(GL_LEQUAL);
@@ -1018,6 +1111,13 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         const bool showDialogue=NpcDialogue::IsNearby(player.position,npc.position,ENVIRONMENT_SCALE);
         dialogue.Draw(showDialogue&&!axolote.DialogueVisible(),width,height);
         axolote.DrawDialogue(width,height);
+        if (ofrendaDialogue)
+        {
+            const bool showOfrenda = NpcDialogue::IsOfrendaNearby(player.position) ||
+                (cameraMode == CameraMode::Free && NpcDialogue::IsOfrendaNearby(freeCamera.GetPosition()));
+            ofrendaDialogue->Draw(showOfrenda && !showDialogue && !axolote.DialogueVisible(), width, height);
+            if (validate && showOfrenda) ++ofrendaDialogueSamples;
+        }
         profiler.EndRender();
         const int actionFrame=environment?340:140;
         const bool captureAction=frame==actionFrame||frame==actionFrame+55||frame==actionFrame+96||frame==actionFrame+132||frame==actionFrame+180||frame==actionFrame+255;
@@ -1029,7 +1129,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             if(showDialogue!=dialogueApproachTest)throw std::runtime_error("El dialogo no aparece/desaparece por proximidad real de la nina.");
             if(showDialogue)++dialogueNearSamples;else ++dialogueFarSamples;
         }
-        if (validate && (frame==moonFrame || captureAxolote || captureNpc || captureBoat || captureAction || frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 305 || frame == 310 || frame == 315 || frame == 320 || frame == 325 || frame == 330 || frame == 335 || frame == 350 || frame == 390 || frame == 775))
+        if (validate && (frame==moonFrame || captureAxolote || captureNpc || captureBoat || captureAction || frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || frame == 155 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 305 || frame == 310 || frame == 315 || frame == 320 || frame == 325 || frame == 330 || frame == 335 || frame == 350 || frame == 390 || frame == 775))
         {
             std::vector<float> depth(static_cast<size_t>(width) * height);
             glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, depth.data());
@@ -1049,6 +1149,8 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             if(axoloteDialogueSamples<4)throw std::runtime_error("Faltan los tres paneles del axolote en pantalla.");
             std::cout<<"Axolote visual OK: aviso G, mensajes 1/2/3, cierre y salida del trigger."<<std::endl;
             std::cout<<"Dialogo OK: texto visible al acercarse y oculto al alejarse; UI RGBA sin errores."<<std::endl;
+            if (ofrendaDialogue && ofrendaDialogueSamples < 1) throw std::runtime_error("El cuadro de informacion de la ofrenda no aparecio.");
+            std::cout << "Ofrenda de las mil luces: cuadro informativo visible al acercarse en medio OK." << std::endl;
             std::cout << "VALIDACION OK: animacion suave, luces, ambas camaras y " << frame
                 << " frames sin errores OpenGL." << std::endl;
             break;
