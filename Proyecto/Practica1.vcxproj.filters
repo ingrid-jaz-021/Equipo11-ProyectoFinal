@@ -24,6 +24,12 @@
     <ClInclude Include="LagunaSpotLighting.h">
       <Filter>Archivos de encabezado</Filter>
     </ClInclude>
+    <ClInclude Include="LagunaDancer.h">
+      <Filter>Archivos de encabezado</Filter>
+    </ClInclude>
+    <ClInclude Include="LagunaAlmas.h">
+      <Filter>Archivos de encabezado</Filter>
+    </ClInclude>
     <ClInclude Include="Shader.h">
       <Filter>Archivos de encabezado</Filter>
     </ClInclude>
@@ -130,6 +136,10 @@
     <None Include="Models\XoloRig\XoloRig.fbx"><Filter>Archivos de recursos</Filter></None>
     <None Include="Models\XoloRig\textures\xolo_skin.png"><Filter>Archivos de recursos</Filter></None>
     <None Include="Models\XoloRig\textures\xolo_features.jpg"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\XolotlDanza.fbx"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\XolotlDanza.xanim"><Filter>Archivos de recursos</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\XolotlDanza.blend"><Filter>Archivos de recursos</Filter></None>
+    <None Include="tools\build_xolotl_rig_dance.py"><Filter>Archivos de recursos</Filter></None>
     <None Include="Models\Farola\Farola.obj"><Filter>Archivos de recursos</Filter></None>
     <None Include="Models\Farola\Farola.mtl"><Filter>Archivos de recursos</Filter></None>
   </ItemGroup>

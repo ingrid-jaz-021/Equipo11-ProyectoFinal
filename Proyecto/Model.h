@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
+#include <cstring>
 #include <functional>
 #include <future>
 #include <iostream>
@@ -41,7 +43,13 @@ public:
     explicit Model(const char* path, const std::function<bool()>& keepLoading = {},
         ModelOptions options = {}) : options(options)
     {
-        try { LoadModel(path, keepLoading); }
+        try
+        {
+            const std::string assetPath(path);
+            if(assetPath.size()>=6&&assetPath.compare(assetPath.size()-6,6,".xanim")==0)
+                LoadVertexAnimation(assetPath);
+            else LoadModel(assetPath, keepLoading);
+        }
         catch (...) { ReleaseTextures(); throw; }
     }
     ~Model() { if(instanceBuffer)glDeleteBuffers(1,&instanceBuffer);ReleaseTextures(); }
@@ -130,6 +138,27 @@ public:
         const auto found = materialProfiles.find(name);
         return found == materialProfiles.end() ? nullptr : &found->second;
     }
+    bool HasBakedAnimation() const{return !bakedMeshes.empty();}
+    void UpdateBakedAnimation(float time)
+    {
+        if(bakedMeshes.empty())return;
+        const float wrapped=std::fmod(std::max(0.0f,time),bakedDuration);
+        const float sample=wrapped/bakedDuration*static_cast<float>(bakedMeshes.front().frames.size()-1);
+        const size_t first=static_cast<size_t>(sample),second=std::min(first+1,bakedMeshes.front().frames.size()-1);
+        const float blend=sample-static_cast<float>(first);
+        for(size_t m=0;m<bakedMeshes.size();++m)
+        {
+            auto vertices=bakedMeshes[m].base;
+            const auto& a=bakedMeshes[m].frames[first];const auto& b=bakedMeshes[m].frames[second];
+            for(size_t v=0;v<vertices.size();++v)
+            {
+                vertices[v].Position=glm::mix(a[v].position,b[v].position,blend);
+                const auto normal=glm::mix(a[v].normal,b[v].normal,blend);
+                vertices[v].Normal=glm::length(normal)>0.00001f?glm::normalize(normal):a[v].normal;
+            }
+            meshes[m].UpdateVertices(vertices);
+        }
+    }
     bool GetMaterialEndBounds(const std::string& name,int axis,float band,glm::vec3& min,glm::vec3& max) const
     {
         glm::vec3 lo,hi;
@@ -169,6 +198,10 @@ private:
     ModelOptions options;
     std::unordered_map<std::string,std::vector<glm::vec3>> materialProfiles;
     std::unique_ptr<SkeletalAnimator> skeleton;
+    struct BakedVertex {glm::vec3 position,normal;};
+    struct BakedMeshFrames {std::vector<Vertex> base;std::vector<std::vector<BakedVertex>> frames;};
+    std::vector<BakedMeshFrames> bakedMeshes;
+    float bakedDuration=0.0f;
     struct Bounds { glm::vec3 min, max; };
     std::unordered_map<std::string, Bounds> materialBounds;
     glm::mat4 kioskTransform=glm::mat4(1);
@@ -556,5 +589,88 @@ private:
         const GLuint texture = LoadRgbaTexture(filename);
         texturesLoaded.emplace(filename, texture);
         return texture;
+    }
+    template<typename T> static T ReadBinaryValue(std::istream& input)
+    {
+        T value{};input.read(reinterpret_cast<char*>(&value),sizeof(T));
+        if(!input)throw std::runtime_error("Archivo de animacion de vertices truncado.");
+        return value;
+    }
+    static std::string ReadBinaryString(std::istream& input)
+    {
+        const uint32_t length=ReadBinaryValue<uint32_t>(input);
+        if(length>4096)throw std::runtime_error("Cadena demasiado larga en animacion de vertices.");
+        std::string value(length,'\0');
+        if(length)input.read(&value[0],length);
+        if(!input)throw std::runtime_error("Cadena truncada en animacion de vertices.");
+        return value;
+    }
+    void LoadVertexAnimation(const std::string& path)
+    {
+        std::cout<<"Cargando animacion de vertices "<<path<<"..."<<std::endl;
+        const size_t separator=path.find_last_of("/\\");
+        directory=separator==std::string::npos?".":path.substr(0,separator);
+        std::ifstream input(path,std::ios::binary);
+        if(!input)throw std::runtime_error("No se pudo abrir la animacion de vertices: "+path);
+        char magic[8]{};input.read(magic,sizeof(magic));
+        if(!input||std::memcmp(magic,"XOLXANM1",8)!=0)throw std::runtime_error("Firma invalida en animacion de vertices.");
+        const uint32_t version=ReadBinaryValue<uint32_t>(input);
+        bakedDuration=ReadBinaryValue<float>(input);
+        const uint32_t frameCount=ReadBinaryValue<uint32_t>(input);
+        const uint32_t meshCount=ReadBinaryValue<uint32_t>(input);
+        if(version!=1||bakedDuration<=0.0f||frameCount<2||frameCount>240||meshCount==0||meshCount>32)
+            throw std::runtime_error("Encabezado invalido en animacion de vertices.");
+        meshes.reserve(meshCount);bakedMeshes.reserve(meshCount);
+        for(uint32_t m=0;m<meshCount;++m)
+        {
+            const std::string meshName=ReadBinaryString(input);
+            const std::string materialName=ReadBinaryString(input);
+            const std::string texturePath=ReadBinaryString(input);
+            float diffuse[3]{},emissive[3]{},opacity=1.0f;
+            input.read(reinterpret_cast<char*>(diffuse),sizeof(diffuse));
+            input.read(reinterpret_cast<char*>(emissive),sizeof(emissive));
+            input.read(reinterpret_cast<char*>(&opacity),sizeof(opacity));
+            if(!input)throw std::runtime_error("Material truncado en animacion de vertices.");
+            const uint32_t vertexCount=ReadBinaryValue<uint32_t>(input);
+            const uint32_t indexCount=ReadBinaryValue<uint32_t>(input);
+            if(vertexCount<3||vertexCount>1000000||indexCount<3||indexCount>3000000||indexCount%3)
+                throw std::runtime_error("Topologia invalida en animacion de vertices: "+meshName);
+            std::vector<Vertex> base(vertexCount);
+            glm::vec3 meshLo((std::numeric_limits<float>::max)()),meshHi((std::numeric_limits<float>::lowest)());
+            for(auto& vertex:base)
+            {
+                float values[8]{};input.read(reinterpret_cast<char*>(values),sizeof(values));
+                if(!input)throw std::runtime_error("Vertice base truncado en animacion de vertices.");
+                vertex.Position={values[0],values[1],values[2]};
+                vertex.Normal={values[3],values[4],values[5]};
+                vertex.TexCoords={values[6],values[7]};
+                meshLo=glm::min(meshLo,vertex.Position);meshHi=glm::max(meshHi,vertex.Position);
+            }
+            std::vector<GLuint> indices(indexCount);
+            input.read(reinterpret_cast<char*>(indices.data()),static_cast<std::streamsize>(indices.size()*sizeof(GLuint)));
+            if(!input)throw std::runtime_error("Indices truncados en animacion de vertices.");
+            BakedMeshFrames baked;baked.base=base;baked.frames.resize(frameCount);
+            for(uint32_t frame=0;frame<frameCount;++frame)
+            {
+                auto& values=baked.frames[frame];values.resize(vertexCount);
+                for(uint32_t v=0;v<vertexCount;++v)
+                {
+                    float pose[6]{};input.read(reinterpret_cast<char*>(pose),sizeof(pose));
+                    if(!input)throw std::runtime_error("Pose truncada en animacion de vertices.");
+                    values[v].position={pose[0],pose[1],pose[2]};values[v].normal={pose[3],pose[4],pose[5]};
+                    meshLo=glm::min(meshLo,values[v].position);meshHi=glm::max(meshHi,values[v].position);
+                }
+            }
+            MeshMaterial material;material.diffuseColor={diffuse[0],diffuse[1],diffuse[2]};
+            material.emissiveColor={emissive[0],emissive[1],emissive[2]};material.opacity=opacity;
+            if(!texturePath.empty())material.diffuseTexture=LoadTexture(texturePath);
+            meshes.emplace_back(base,indices,material,meshLo,meshHi,std::vector<SkinVertex>{},glm::mat4(1),false,true);
+            minBounds=glm::min(minBounds,meshLo);maxBounds=glm::max(maxBounds,meshHi);
+            bakedMeshes.push_back(std::move(baked));
+            std::cout<<"  "<<meshName<<" / "<<materialName<<": "<<vertexCount<<" vertices."<<std::endl;
+        }
+        std::cout<<"Animacion lista: "<<meshCount<<" mallas, "<<frameCount<<" poses, "
+            <<bakedDuration<<" s."<<std::endl;
+        UpdateBakedAnimation(0.0f);
     }
 };
