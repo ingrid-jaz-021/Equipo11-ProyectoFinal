@@ -41,6 +41,9 @@ uniform PointLight ofrendaLights[6];
 uniform int ofrendaLightCount;
 uniform vec4 ofrendaCandleRegion;
 uniform vec3 ofrendaCandleColor;
+uniform PointLight fuegoCaminoLights[24];
+uniform int fuegoCaminoLightCount;
+uniform vec4 fuegoCaminoRegion;
 void main()
 {
     vec4 albedo = vec4(material.diffuseColor, material.opacity);
@@ -125,6 +128,25 @@ void main()
         float edgeDist = min(edgeDistX, edgeDistZ);
         float edgeFade = smoothstep(0.0, 35.0, edgeDist);
         illumination += ofrendaCandleColor * edgeFade;
+    }
+    // Luces puntuales de las canastas de fuego del camino (fuego calido y parpadeo organico a lo largo del pasillo)
+    if (fuegoCaminoLightCount > 0 &&
+        WorldPosition.x >= fuegoCaminoRegion.x && WorldPosition.z >= fuegoCaminoRegion.y &&
+        WorldPosition.x <= fuegoCaminoRegion.z && WorldPosition.z <= fuegoCaminoRegion.w)
+    {
+        for (int i = 0; i < min(fuegoCaminoLightCount, 24); ++i)
+        {
+            vec3 delta = fuegoCaminoLights[i].position - WorldPosition;
+            float distanceSquared = dot(delta, delta);
+            float radius = fuegoCaminoLights[i].range;
+            if (distanceSquared >= radius * radius) continue;
+            float distanceToLight = sqrt(max(distanceSquared, 0.0001));
+            vec3 direction = delta / distanceToLight;
+            float normalizedDistance = distanceToLight / radius;
+            float cutoff = 1.0 - smoothstep(0.60, 1.0, normalizedDistance);
+            float attenuation = cutoff / (1.0 + 1.2 * normalizedDistance + 3.0 * normalizedDistance * normalizedDistance);
+            illumination += fuegoCaminoLights[i].color * max(dot(normal, direction), 0.0) * attenuation;
+        }
     }
     FragColor = vec4(albedo.rgb * illumination + material.emissiveColor, 1.0);
 }

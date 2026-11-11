@@ -747,6 +747,13 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         ofrendaLights.Upload(environmentShader, 0.0f);
         ofrendaLights.Upload(characterShader, 0.0f);
         ofrendaLights.Upload(lampShader, 0.0f);
+
+        if (fuegoCamino.Configured())
+        {
+            fuegoCamino.UploadLights(environmentShader, 0.0f);
+            fuegoCamino.UploadLights(characterShader, 0.0f);
+            fuegoCamino.UploadLights(lampShader, 0.0f);
+        }
     }
     std::unique_ptr<AlphaBillboards> billboards;
     std::unique_ptr<TreeVegetation> vegetation;
@@ -1040,6 +1047,12 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             ofrendaLights.Upload(environmentShader, static_cast<float>(now));
             ofrendaLights.Upload(characterShader, static_cast<float>(now));
             ofrendaLights.Upload(lampShader, static_cast<float>(now));
+        }
+        if (fuegoCamino.Configured())
+        {
+            fuegoCamino.UploadLights(environmentShader, static_cast<float>(now));
+            fuegoCamino.UploadLights(characterShader, static_cast<float>(now));
+            fuegoCamino.UploadLights(lampShader, static_cast<float>(now));
         }
         if (environment)
         {

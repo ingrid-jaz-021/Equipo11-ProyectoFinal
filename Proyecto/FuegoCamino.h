@@ -1,6 +1,9 @@
 #pragma once
 #include <iostream>
 #include <vector>
+#include <string>
+#include <cmath>
+#include <algorithm>
 #include <stdexcept>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -12,6 +15,20 @@ class FuegoCamino
 {
 public:
     static constexpr float ModelScale = 0.38f;
+
+    struct LightPoint
+    {
+        glm::vec3 worldPosition;
+        float flickerPhase;
+        float flickerFreq;
+    };
+
+    struct LightUniformNames
+    {
+        std::string posName;
+        std::string colName;
+        std::string rangeName;
+    };
 
     void Build(const GroundSurface* ground, const glm::vec3& sourceOrigin, float worldScale)
     {
@@ -56,11 +73,17 @@ public:
 
         modelMatrices.clear();
         worldPositions.clear();
+        lights.clear();
+        uniformNames.clear();
 
         constexpr float bottomOffset = 0.412f * ModelScale; // Compensar base del modelo sobre la banqueta
 
-        for (const auto& coord : localCoords)
+        float minX = 1e9f, maxX = -1e9f;
+        float minZ = 1e9f, maxZ = -1e9f;
+
+        for (size_t i = 0; i < sizeof(localCoords) / sizeof(localCoords[0]); ++i)
         {
+            const auto& coord = localCoords[i];
             float surfaceY = 1.776f;
             if (ground)
             {
@@ -76,28 +99,76 @@ public:
             glm::mat4 m = glm::translate(glm::mat4(1.0f), worldPos);
             m = glm::scale(m, glm::vec3(scale * ModelScale));
             modelMatrices.push_back(m);
+
+            // Fuente de luz puntual situada en el corazon de la llama del brasero
+            const glm::vec3 flameWorldPos = worldPos + glm::vec3(0.0f, 1.8f * ModelScale * scale, 0.0f);
+            const float phase = static_cast<float>(i) * 1.37f;
+            const float freq = 13.5f + static_cast<float>(i % 5) * 1.8f;
+            lights.push_back({ flameWorldPos, phase, freq });
+
+            minX = std::min(minX, flameWorldPos.x);
+            maxX = std::max(maxX, flameWorldPos.x);
+            minZ = std::min(minZ, flameWorldPos.z);
+            maxZ = std::max(maxZ, flameWorldPos.z);
+
+            const std::string prefix = "fuegoCaminoLights[" + std::to_string(i) + "].";
+            uniformNames.push_back({ prefix + "position", prefix + "color", prefix + "range" });
         }
 
+        constexpr float margin = 70.0f;
+        lightRegion = glm::vec4(minX - margin, minZ - margin, maxX + margin, maxZ + margin);
         configured = !modelMatrices.empty();
+    }
+
+    // Actualiza las luces puntuales calidas de cada fuego con parpadeo organico asincrono
+    void UploadLights(const Shader& shader, float now) const
+    {
+        if (!configured || lights.empty()) return;
+        shader.Use();
+
+        glUniform1i(shader.Uniform("fuegoCaminoLightCount"), static_cast<int>(lights.size()));
+        glUniform4fv(shader.Uniform("fuegoCaminoRegion"), 1, &lightRegion[0]);
+
+        // Color fuego calido (ambar/dorado, identico a las antorchas)
+        const glm::vec3 baseFireColor(1.0f, 0.58f, 0.16f);
+        constexpr float range = 42.0f; // Alcance para iluminar el brasero, la banqueta y flores cercanas
+
+        for (size_t i = 0; i < lights.size(); ++i)
+        {
+            const float ph = lights[i].flickerPhase;
+            const float fr = lights[i].flickerFreq;
+            const float flicker = 0.13f * std::sin(now * fr + ph)
+                                + 0.08f * std::sin(now * (fr * 1.83f) + ph * 2.1f)
+                                + 0.04f * std::cos(now * (fr * 2.71f) + ph * 0.7f);
+
+            const glm::vec3 color = baseFireColor * (1.65f + flicker);
+
+            glUniform3fv(shader.Uniform(uniformNames[i].posName), 1, &lights[i].worldPosition[0]);
+            glUniform3fv(shader.Uniform(uniformNames[i].colName), 1, &color[0]);
+            glUniform1f(shader.Uniform(uniformNames[i].rangeName), range);
+        }
     }
 
     void Validate() const
     {
-        if (modelMatrices.size() != 23)
-            throw std::runtime_error("Numero incorrecto de canastas de fuego del camino.");
-        std::cout << "Fuego Camino: " << modelMatrices.size() << " braseros colocados entre flores a lo largo del pasillo OK.\n";
+        if (modelMatrices.size() != 23 || lights.size() != 23)
+            throw std::runtime_error("Numero incorrecto de canastas de fuego o fuentes de luz del camino.");
+        std::cout << "Fuego Camino: " << modelMatrices.size() << " braseros con fuentes de luz puntual calida OK.\n";
     }
 
     bool Configured() const { return configured; }
     size_t Count() const { return modelMatrices.size(); }
     const std::vector<glm::mat4>& Matrices() const { return modelMatrices; }
     const std::vector<glm::vec3>& WorldPositions() const { return worldPositions; }
+    const std::vector<LightPoint>& Lights() const { return lights; }
 
 private:
     std::vector<glm::mat4> modelMatrices;
     std::vector<glm::vec3> worldPositions;
+    std::vector<LightPoint> lights;
+    std::vector<LightUniformNames> uniformNames;
+    glm::vec4 lightRegion = glm::vec4(0.0f);
     glm::vec3 origin = glm::vec3(0.0f);
     float scale = 1.0f;
     bool configured = false;
 };
-
