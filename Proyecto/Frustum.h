@@ -25,3 +25,11 @@ inline bool TransformedBoundsVisible(const FrustumPlanes& planes,const glm::vec3
     const auto extent=glm::abs(glm::vec3(model[0]))*half.x+glm::abs(glm::vec3(model[1]))*half.y+glm::abs(glm::vec3(model[2]))*half.z;
     return BoundsVisible(planes,center-extent,center+extent);
 }
+
+// Una luz de radio finito solo puede afectar fragmentos dentro de esta esfera.
+inline bool LightSphereVisible(const FrustumPlanes* planes,const glm::vec3& center,float radius)
+{
+    if(!planes)return true;
+    for(const auto& p:*planes)if(glm::dot(glm::vec3(p),center)+p.w < -radius-.01f)return false;
+    return true;
+}

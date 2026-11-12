@@ -1,154 +1,213 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Archivos de origen">
-      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
-    </Filter>
-    <Filter Include="Archivos de encabezado">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
-    </Filter>
-    <Filter Include="Archivos de recursos">
-      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
-    </Filter>
-    <Filter Include="Archivos de origen\Shader">
-      <UniqueIdentifier>{26d0b850-0591-47f6-9a79-a93090832cdc}</UniqueIdentifier>
-    </Filter>
+    <Filter Include="Archivos de encabezado" />
+    <Filter Include="Archivos de origen" />
+    <Filter Include="Licencias" />
+    <Filter Include="Recursos" />
+    <Filter Include="Recursos\Models" />
+    <Filter Include="Recursos\Models\AxoloteEntrada" />
+    <Filter Include="Recursos\Models\EntornoCompleto" />
+    <Filter Include="Recursos\Models\EntornoCompleto\Laguna" />
+    <Filter Include="Recursos\Models\EntornoCompleto\Laguna\Agua" />
+    <Filter Include="Recursos\Models\EntornoCompleto\Laguna\Almas" />
+    <Filter Include="Recursos\Models\EntornoCompleto\Laguna\Axolote" />
+    <Filter Include="Recursos\Models\EntornoCompleto\Laguna\BaseEscultura" />
+    <Filter Include="Recursos\Models\EntornoCompleto\Laguna\CalacaEsc" />
+    <Filter Include="Recursos\Models\EntornoCompleto\Laguna\HumanoEsc" />
+    <Filter Include="Recursos\Models\EntornoCompleto\Laguna\LuzEsc" />
+    <Filter Include="Recursos\Models\EntornoCompleto\Laguna\Piramide2" />
+    <Filter Include="Recursos\Models\EntornoCompleto\Laguna\SerpienteEsc" />
+    <Filter Include="Recursos\Models\EntornoCompleto\Laguna\Tarima" />
+    <Filter Include="Recursos\Models\EntornoCompleto\Laguna\Xolotl" />
+    <Filter Include="Recursos\Models\EntornoCompleto\Pasillo" />
+    <Filter Include="Recursos\Models\EntornoCompleto\Zocalo" />
+    <Filter Include="Recursos\Models\Farola" />
+    <Filter Include="Recursos\Models\Fuego camino" />
+    <Filter Include="Recursos\Models\GuiaAntorcha" />
+    <Filter Include="Recursos\Models\KioskNpcRig" />
+    <Filter Include="Recursos\Models\KioskNpcRig\textures" />
+    <Filter Include="Recursos\Models\NinaRig" />
+    <Filter Include="Recursos\Models\NinaRig\textures" />
+    <Filter Include="Recursos\Models\Pan de muerto" />
+    <Filter Include="Recursos\Models\XoloRig" />
+    <Filter Include="Recursos\Models\XoloRig\textures" />
+    <Filter Include="Recursos\SkyBox" />
+    <Filter Include="Recursos\images" />
+    <Filter Include="Shaders" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ZocaloLighting.h">
-      <Filter>Archivos de encabezado</Filter>
-    </ClInclude>
-    <ClInclude Include="LagunaSpotLighting.h">
-      <Filter>Archivos de encabezado</Filter>
-    </ClInclude>
-    <ClInclude Include="LagunaDancer.h">
-      <Filter>Archivos de encabezado</Filter>
-    </ClInclude>
-    <ClInclude Include="LagunaAlmas.h">
-      <Filter>Archivos de encabezado</Filter>
-    </ClInclude>
-    <ClInclude Include="GuiaAntorchas.h">
-      <Filter>Archivos de encabezado</Filter>
-    </ClInclude>
-    <ClInclude Include="Shader.h">
-      <Filter>Archivos de encabezado</Filter>
-    </ClInclude>
-    <ClInclude Include="CharacterController.h">
-      <Filter>Archivos de encabezado</Filter>
-    </ClInclude>
-    <ClInclude Include="CompanionController.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="GroundSurface.h">
-      <Filter>Archivos de encabezado</Filter>
-    </ClInclude>
-    <ClInclude Include="UnicodeIO.h">
-      <Filter>Archivos de encabezado</Filter>
-    </ClInclude>
-    <ClInclude Include="Mesh.h">
-      <Filter>Archivos de encabezado</Filter>
-    </ClInclude>
-    <ClInclude Include="Model.h">
-      <Filter>Archivos de encabezado</Filter>
-    </ClInclude>
-    <ClInclude Include="Skinning.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="SkeletalAnimator.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="Texture2D.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="FloorUV.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="TreeVegetation.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClCompile Include="Proyecto.cpp"><Filter>Archivos de origen</Filter></ClCompile>
     <ClInclude Include="AlphaBillboards.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="CutoutImage.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="ZocaloBackdrop.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="WaterSurface.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="LakeFence.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="BoatNavigation.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="RenderState.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="Frustum.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="RenderMetrics.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="KioskNpc.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="NpcDialogue.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="DockSurface.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="MovementSettings.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="Camera.h">
-      <Filter>Archivos de encabezado</Filter>
-    </ClInclude>
-    <ClInclude Include="Texture.h">
-      <Filter>Archivos de encabezado</Filter>
-    </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="images\Arbol_RGBA.png"><Filter>Archivos de recursos</Filter></None>
-    <None Include="images\Casa1.png"><Filter>Archivos de recursos</Filter></None>
-    <None Include="images\Casa2.png"><Filter>Archivos de recursos</Filter></None>
-    <None Include="images\Casa3.png"><Filter>Archivos de recursos</Filter></None>
-    <None Include="images\Iglesia.png"><Filter>Archivos de recursos</Filter></None>
-    <None Include="images\Cerca_lago.png"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\barquito.obj"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\barquito.mtl"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\canasta.obj"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\canasta.mtl"><Filter>Archivos de recursos</Filter></None>
-    <None Include="images\IvanovichDialogo.png"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Shader\dialogue.vs"><Filter>Archivos de origen\Shader</Filter></None>
-    <None Include="Shader\dialogue.frag"><Filter>Archivos de origen\Shader</Filter></None>
-    <None Include="Models\KioskNpcRig\KioskNpcRig.fbx"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\Pan de muerto\PanMuerto.obj"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\Pan de muerto\PanMuerto.mtl"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\Pan de muerto\Texturapan.jpg"><Filter>Archivos de recursos</Filter></None>
-    <None Include="images\MuelleMadera.png"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Shader\billboard.vs"><Filter>Archivos de origen\Shader</Filter></None>
-    <None Include="Shader\billboard_instanced.vs"><Filter>Archivos de origen\Shader</Filter></None>
-    <None Include="Shader\billboard_instanced.frag"><Filter>Archivos de origen\Shader</Filter></None>
-    <None Include="Shader\modelLoading_instanced.vs"><Filter>Archivos de origen\Shader</Filter></None>
-    <None Include="Shader\billboard.frag"><Filter>Archivos de origen\Shader</Filter></None>
-    <None Include="Shader\water.vs"><Filter>Archivos de origen\Shader</Filter></None>
-    <None Include="Shader\water.frag"><Filter>Archivos de origen\Shader</Filter></None>
-    <None Include="Models\EntornoCompleto\Laguna\Agua\WaterPlane.txt"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\EntornoCompleto\Laguna\Agua\River_Water_Texture-427.jpg"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Shader\modelLoading.frag">
-      <Filter>Archivos de origen\Shader</Filter>
-    </None>
-    <None Include="Shader\character.vs">
-      <Filter>Archivos de origen\Shader</Filter>
-    </None>
-    <None Include="Shader\modelLoading.vs">
-      <Filter>Archivos de origen\Shader</Filter>
-    </None>
-    <None Include="Shader\SkyBox.frag">
-      <Filter>Archivos de origen\Shader</Filter>
-    </None>
-    <None Include="Shader\SkyBox.vs">
-      <Filter>Archivos de origen\Shader</Filter>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="Proyecto.cpp">
-      <Filter>Archivos de origen</Filter>
-    </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="AxoloteNpc.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <ClInclude Include="SolidObstacles.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <None Include="Models\AxoloteEntrada\AxoloteEntrada.fbx"><Filter>Archivos de recursos</Filter></None>
-    <None Include="images\AxoloteDialogo0.png"><Filter>Archivos de recursos</Filter></None>
-    <None Include="images\AxoloteDialogo1.png"><Filter>Archivos de recursos</Filter></None>
-    <None Include="images\AxoloteDialogo2.png"><Filter>Archivos de recursos</Filter></None>
-    <None Include="images\AxoloteDialogo3.png"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\NinaRig\NinaRig.fbx"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\NinaRig\arm-limits.txt"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\XoloRig\XoloRig.fbx"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\XoloRig\textures\xolo_skin.png"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\XoloRig\textures\xolo_features.jpg"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\EntornoCompleto\Laguna\Xolotl\XolotlDanza.fbx"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\EntornoCompleto\Laguna\Xolotl\XolotlDanza.xanim"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\EntornoCompleto\Laguna\Xolotl\XolotlDanza.blend"><Filter>Archivos de recursos</Filter></None>
-    <None Include="tools\build_xolotl_rig_dance.py"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\Farola\Farola.obj"><Filter>Archivos de recursos</Filter></None>
-    <None Include="Models\Farola\Farola.mtl"><Filter>Archivos de recursos</Filter></None>
-  </ItemGroup>
-  <ItemGroup>
+    <ClInclude Include="BoatNavigation.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="Camera.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="CharacterController.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="CompanionController.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="CutoutImage.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="DockSurface.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="FloorUV.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="Frustum.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="FuegoCamino.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="GroundSurface.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="GuiaAntorchas.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="GuiaArmPose.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="KioskNpc.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="LagunaAlmas.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="LagunaDancer.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="LagunaSpotLighting.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="LakeFence.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="Mesh.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="Model.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="MoonSky.h"><Filter>Archivos de encabezado</Filter></ClInclude>
-    <None Include="Shader\moon.vs"><Filter>Archivos de origen\Shader</Filter></None>
-    <None Include="Shader\moon.frag"><Filter>Archivos de origen\Shader</Filter></None>
+    <ClInclude Include="MovementSettings.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="NpcDialogue.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="OfrendaLighting.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="RenderMetrics.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="RenderState.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="Shader.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="SkeletalAnimator.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="Skinning.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="SolidObstacles.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="Texture.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="Texture2D.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="TreeVegetation.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="UnicodeIO.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="WaterSurface.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="WorldBoundaries.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="ZocaloBackdrop.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="ZocaloLighting.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="stb_image.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <None Include="Models\AxoloteEntrada\AxoloteEntrada.fbx"><Filter>Recursos\Models\AxoloteEntrada</Filter></None>
+    <None Include="Models\EntornoCompleto\Arboles.txt"><Filter>Recursos\Models\EntornoCompleto</Filter></None>
+    <None Include="Models\EntornoCompleto\EntornoCompleto.mtl"><Filter>Recursos\Models\EntornoCompleto</Filter></None>
+    <None Include="Models\EntornoCompleto\EntornoCompleto.zip"><Filter>Recursos\Models\EntornoCompleto</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\Agua\River_Water_Texture-427.jpg"><Filter>Recursos\Models\EntornoCompleto\Laguna\Agua</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\Agua\WaterPlane.txt"><Filter>Recursos\Models\EntornoCompleto\Laguna\Agua</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\Almas\AlmasTela.png"><Filter>Recursos\Models\EntornoCompleto\Laguna\Almas</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\Almas\alma.mtl"><Filter>Recursos\Models\EntornoCompleto\Laguna\Almas</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\Almas\alma.obj"><Filter>Recursos\Models\EntornoCompleto\Laguna\Almas</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\Axolote\cementoTex.png"><Filter>Recursos\Models\EntornoCompleto\Laguna\Axolote</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\BaseEscultura\BaseEsculturaColor.png"><Filter>Recursos\Models\EntornoCompleto\Laguna\BaseEscultura</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\CalacaEsc\CalacaColor.png"><Filter>Recursos\Models\EntornoCompleto\Laguna\CalacaEsc</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\HumanoEsc\HumanoEscColor.png"><Filter>Recursos\Models\EntornoCompleto\Laguna\HumanoEsc</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\LuzEsc\luzEscBaseColor.png"><Filter>Recursos\Models\EntornoCompleto\Laguna\LuzEsc</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\Piramide2\rock-stone-texture-seamless.jpg"><Filter>Recursos\Models\EntornoCompleto\Laguna\Piramide2</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\SerpienteEsc\SerpienteEscColor.png"><Filter>Recursos\Models\EntornoCompleto\Laguna\SerpienteEsc</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\Tarima\natural-wooden-background.jpg"><Filter>Recursos\Models\EntornoCompleto\Laguna\Tarima</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\AccesoriosXolColor.png"><Filter>Recursos\Models\EntornoCompleto\Laguna\Xolotl</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\MaleColorXolotl.png"><Filter>Recursos\Models\EntornoCompleto\Laguna\Xolotl</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\PlumasColorXolotl.png"><Filter>Recursos\Models\EntornoCompleto\Laguna\Xolotl</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\RopaXolotlColor.png"><Filter>Recursos\Models\EntornoCompleto\Laguna\Xolotl</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\XolotlDanza.xanim"><Filter>Recursos\Models\EntornoCompleto\Laguna\Xolotl</Filter></None>
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\XolotlMaskColor.png"><Filter>Recursos\Models\EntornoCompleto\Laguna\Xolotl</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\CuboBaseColor.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\FuegoBaseColor.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\Letrero_bienvenida.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\Piso_Aserrin_1.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\Piso_Aserrin_2.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\Piso_Aserrin_3.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\RampaBaseColor.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\TexturaTarima2.jpg"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\VELABaseColor.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\facade.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\ladrilloOfrenda.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\letrero_Ofrenda.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\piso_ofrendaCempa.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\roof.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\tex_azucar.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\tex_cempasuchil.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\tex_chocolate.001.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\tex_florCempa.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Pasillo\tex_frutas.png"><Filter>Recursos\Models\EntornoCompleto\Pasillo</Filter></None>
+    <None Include="Models\EntornoCompleto\Zocalo\Agua.png"><Filter>Recursos\Models\EntornoCompleto\Zocalo</Filter></None>
+    <None Include="Models\EntornoCompleto\Zocalo\Banqueta.png"><Filter>Recursos\Models\EntornoCompleto\Zocalo</Filter></None>
+    <None Include="Models\EntornoCompleto\Zocalo\Calle.png"><Filter>Recursos\Models\EntornoCompleto\Zocalo</Filter></None>
+    <None Include="Models\EntornoCompleto\Zocalo\Gris.png"><Filter>Recursos\Models\EntornoCompleto\Zocalo</Filter></None>
+    <None Include="Models\EntornoCompleto\Zocalo\Pasto.png"><Filter>Recursos\Models\EntornoCompleto\Zocalo</Filter></None>
+    <None Include="Models\EntornoCompleto\Zocalo\Piedra.png"><Filter>Recursos\Models\EntornoCompleto\Zocalo</Filter></None>
+    <None Include="Models\EntornoCompleto\Zocalo\Piso.png"><Filter>Recursos\Models\EntornoCompleto\Zocalo</Filter></None>
+    <None Include="Models\EntornoCompleto\Zocalo\Piso_banqueta.png"><Filter>Recursos\Models\EntornoCompleto\Zocalo</Filter></None>
+    <None Include="Models\EntornoCompleto\Zocalo\Textura_Kiosko.jpg"><Filter>Recursos\Models\EntornoCompleto\Zocalo</Filter></None>
+    <None Include="Models\EntornoCompleto\Zocalo\Textura_MetalB.jpg"><Filter>Recursos\Models\EntornoCompleto\Zocalo</Filter></None>
+    <None Include="Models\Farola\Farola.mtl"><Filter>Recursos\Models\Farola</Filter></None>
+    <None Include="Models\Farola\Farola.obj"><Filter>Recursos\Models\Farola</Filter></None>
+    <None Include="Models\Farola\Textura_MetalB.jpg"><Filter>Recursos\Models\Farola</Filter></None>
+    <None Include="Models\Farola\Textura_focoAzul.png"><Filter>Recursos\Models\Farola</Filter></None>
+    <None Include="Models\Fuego camino\Tex_fuegoCamino.png"><Filter>Recursos\Models\Fuego camino</Filter></None>
+    <None Include="Models\Fuego camino\fuego_camino.mtl"><Filter>Recursos\Models\Fuego camino</Filter></None>
+    <None Include="Models\Fuego camino\fuego_camino.obj"><Filter>Recursos\Models\Fuego camino</Filter></None>
+    <None Include="Models\GuiaAntorcha\HombreGA.mtl"><Filter>Recursos\Models\GuiaAntorcha</Filter></None>
+    <None Include="Models\GuiaAntorcha\HombreGA_BrazoDer_Flex.obj"><Filter>Recursos\Models\GuiaAntorcha</Filter></None>
+    <None Include="Models\GuiaAntorcha\HombreGA_BrazoIzq_Flex.obj"><Filter>Recursos\Models\GuiaAntorcha</Filter></None>
+    <None Include="Models\GuiaAntorcha\HombreGA_Cuerpo.obj"><Filter>Recursos\Models\GuiaAntorcha</Filter></None>
+    <None Include="Models\GuiaAntorcha\MujerGA.mtl"><Filter>Recursos\Models\GuiaAntorcha</Filter></None>
+    <None Include="Models\GuiaAntorcha\MujerGA_BrazoDer_Flex.obj"><Filter>Recursos\Models\GuiaAntorcha</Filter></None>
+    <None Include="Models\GuiaAntorcha\MujerGA_BrazoIzq_Flex.obj"><Filter>Recursos\Models\GuiaAntorcha</Filter></None>
+    <None Include="Models\GuiaAntorcha\MujerGA_Cuerpo.obj"><Filter>Recursos\Models\GuiaAntorcha</Filter></None>
+    <None Include="Models\GuiaAntorcha\Tex_HombreGuia.png"><Filter>Recursos\Models\GuiaAntorcha</Filter></None>
+    <None Include="Models\GuiaAntorcha\Tex_MujerGuia.png"><Filter>Recursos\Models\GuiaAntorcha</Filter></None>
+    <None Include="Models\KioskNpcRig\KioskNpcRig.fbx"><Filter>Recursos\Models\KioskNpcRig</Filter></None>
+    <None Include="Models\KioskNpcRig\textures\Textura_gorra.png"><Filter>Recursos\Models\KioskNpcRig\textures</Filter></None>
+    <None Include="Models\KioskNpcRig\textures\Textura_pantalon.png"><Filter>Recursos\Models\KioskNpcRig\textures</Filter></None>
+    <None Include="Models\KioskNpcRig\textures\Textura_playera.png"><Filter>Recursos\Models\KioskNpcRig\textures</Filter></None>
+    <None Include="Models\KioskNpcRig\textures\Textura_zapatos.png"><Filter>Recursos\Models\KioskNpcRig\textures</Filter></None>
+    <None Include="Models\NinaRig\NinaRig.fbx"><Filter>Recursos\Models\NinaRig</Filter></None>
+    <None Include="Models\NinaRig\arm-limits.txt"><Filter>Recursos\Models\NinaRig</Filter></None>
+    <None Include="Models\NinaRig\mocap\ATTRIBUTION.md"><Filter>Licencias</Filter></None>
+    <None Include="Models\NinaRig\mocap\READMEFIRST.txt"><Filter>Licencias</Filter></None>
+    <None Include="Models\NinaRig\textures\texture_00.png"><Filter>Recursos\Models\NinaRig\textures</Filter></None>
+    <None Include="Models\NinaRig\textures\texture_01.png"><Filter>Recursos\Models\NinaRig\textures</Filter></None>
+    <None Include="Models\NinaRig\textures\texture_02.png"><Filter>Recursos\Models\NinaRig\textures</Filter></None>
+    <None Include="Models\NinaRig\textures\texture_03.png"><Filter>Recursos\Models\NinaRig\textures</Filter></None>
+    <None Include="Models\NinaRig\textures\texture_04.png"><Filter>Recursos\Models\NinaRig\textures</Filter></None>
+    <None Include="Models\NinaRig\textures\texture_05.png"><Filter>Recursos\Models\NinaRig\textures</Filter></None>
+    <None Include="Models\NinaRig\textures\texture_06.png"><Filter>Recursos\Models\NinaRig\textures</Filter></None>
+    <None Include="Models\NinaRig\textures\texture_07.png"><Filter>Recursos\Models\NinaRig\textures</Filter></None>
+    <None Include="Models\Pan de muerto\PanMuerto.mtl"><Filter>Recursos\Models\Pan de muerto</Filter></None>
+    <None Include="Models\Pan de muerto\PanMuerto.obj"><Filter>Recursos\Models\Pan de muerto</Filter></None>
+    <None Include="Models\Pan de muerto\Texturapan.jpg"><Filter>Recursos\Models\Pan de muerto</Filter></None>
+    <None Include="Models\XoloRig\XoloRig.fbx"><Filter>Recursos\Models\XoloRig</Filter></None>
+    <None Include="Models\XoloRig\textures\xolo_features.jpg"><Filter>Recursos\Models\XoloRig\textures</Filter></None>
+    <None Include="Models\XoloRig\textures\xolo_skin.png"><Filter>Recursos\Models\XoloRig\textures</Filter></None>
+    <None Include="Models\barquito.mtl"><Filter>Recursos\Models</Filter></None>
+    <None Include="Models\barquito.obj"><Filter>Recursos\Models</Filter></None>
+    <None Include="Models\canasta.mtl"><Filter>Recursos\Models</Filter></None>
+    <None Include="Models\canasta.obj"><Filter>Recursos\Models</Filter></None>
+    <None Include="Shader\SkyBox.frag"><Filter>Shaders</Filter></None>
+    <None Include="Shader\SkyBox.vs"><Filter>Shaders</Filter></None>
+    <None Include="Shader\billboard.frag"><Filter>Shaders</Filter></None>
+    <None Include="Shader\billboard.vs"><Filter>Shaders</Filter></None>
+    <None Include="Shader\billboard_instanced.frag"><Filter>Shaders</Filter></None>
+    <None Include="Shader\billboard_instanced.vs"><Filter>Shaders</Filter></None>
+    <None Include="Shader\character.vs"><Filter>Shaders</Filter></None>
+    <None Include="Shader\dialogue.frag"><Filter>Shaders</Filter></None>
+    <None Include="Shader\dialogue.vs"><Filter>Shaders</Filter></None>
+    <None Include="Shader\modelLoading.frag"><Filter>Shaders</Filter></None>
+    <None Include="Shader\modelLoading.vs"><Filter>Shaders</Filter></None>
+    <None Include="Shader\modelLoading_instanced.vs"><Filter>Shaders</Filter></None>
+    <None Include="Shader\moon.frag"><Filter>Shaders</Filter></None>
+    <None Include="Shader\moon.vs"><Filter>Shaders</Filter></None>
+    <None Include="Shader\water.frag"><Filter>Shaders</Filter></None>
+    <None Include="Shader\water.vs"><Filter>Shaders</Filter></None>
+    <None Include="SkyBox\galaxy+X.tga"><Filter>Recursos\SkyBox</Filter></None>
+    <None Include="SkyBox\galaxy+Y.tga"><Filter>Recursos\SkyBox</Filter></None>
+    <None Include="SkyBox\galaxy+Z.tga"><Filter>Recursos\SkyBox</Filter></None>
+    <None Include="SkyBox\galaxy-X.tga"><Filter>Recursos\SkyBox</Filter></None>
+    <None Include="SkyBox\galaxy-Y.tga"><Filter>Recursos\SkyBox</Filter></None>
+    <None Include="SkyBox\galaxy-Z.tga"><Filter>Recursos\SkyBox</Filter></None>
+    <None Include="images\Arbol_RGBA.png"><Filter>Recursos\images</Filter></None>
+    <None Include="images\AxoloteDialogo0.png"><Filter>Recursos\images</Filter></None>
+    <None Include="images\AxoloteDialogo1.png"><Filter>Recursos\images</Filter></None>
+    <None Include="images\AxoloteDialogo2.png"><Filter>Recursos\images</Filter></None>
+    <None Include="images\AxoloteDialogo3.png"><Filter>Recursos\images</Filter></None>
+    <None Include="images\Casa1.png"><Filter>Recursos\images</Filter></None>
+    <None Include="images\Casa2.png"><Filter>Recursos\images</Filter></None>
+    <None Include="images\Casa3.png"><Filter>Recursos\images</Filter></None>
+    <None Include="images\Cerca_lago.png"><Filter>Recursos\images</Filter></None>
+    <None Include="images\Iglesia.png"><Filter>Recursos\images</Filter></None>
+    <None Include="images\IvanovichDialogo.png"><Filter>Recursos\images</Filter></None>
+    <None Include="images\MuelleMadera.png"><Filter>Recursos\images</Filter></None>
+    <None Include="images\OfrendaInfo.png"><Filter>Recursos\images</Filter></None>
   </ItemGroup>
 </Project>

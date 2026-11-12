@@ -47,7 +47,6 @@ public:
         const auto it=uniforms.find(name);if(it!=uniforms.end())return it->second;
         const GLint location=glGetUniformLocation(Program,name.c_str());uniforms.emplace(name,location);return location;
     }
-    GLint getColorLocation() const { return Uniform("color"); }
 private:
     mutable std::unordered_map<std::string,GLint> uniforms;
     static std::string ReadFile(const char* path)

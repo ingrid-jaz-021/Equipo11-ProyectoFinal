@@ -18,87 +18,184 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+
   <ItemGroup>
-    <ClInclude Include="Skinning.h" />
-    <ClInclude Include="SkeletalAnimator.h" />
-    <ClInclude Include="Texture2D.h" />
-    <ClInclude Include="FloorUV.h" />
-    <ClInclude Include="TreeVegetation.h" />
-    <ClInclude Include="AlphaBillboards.h" />
-    <ClInclude Include="CutoutImage.h" />
-    <ClInclude Include="ZocaloBackdrop.h" />
-    <ClInclude Include="WaterSurface.h" />
-    <ClInclude Include="LakeFence.h" />
-    <ClInclude Include="BoatNavigation.h" />
-    <ClInclude Include="RenderState.h" />
-    <ClInclude Include="Frustum.h" />
-    <ClInclude Include="RenderMetrics.h" />
-    <ClInclude Include="KioskNpc.h" />
-    <ClInclude Include="NpcDialogue.h" />
-    <ClInclude Include="DockSurface.h" />
-    <ClInclude Include="MovementSettings.h" />
-    <ClInclude Include="Camera.h" />
-    <ClInclude Include="ZocaloLighting.h" />
-    <ClInclude Include="LagunaSpotLighting.h" />
-    <ClInclude Include="LagunaDancer.h" />
-    <ClInclude Include="LagunaAlmas.h" />
-    <ClInclude Include="GuiaAntorchas.h" />
-    <ClInclude Include="CharacterController.h" />
-    <ClInclude Include="CompanionController.h" />
-    <ClInclude Include="GroundSurface.h" />
-    <ClInclude Include="UnicodeIO.h" />
-    <ClInclude Include="Mesh.h" />
-    <ClInclude Include="Model.h" />
-    <ClInclude Include="Shader.h" />
-    <ClInclude Include="Texture.h" />
+    <ClCompile Include="Proyecto.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="AlphaBillboards.h" />
+    <ClInclude Include="AxoloteNpc.h" />
+    <ClInclude Include="BoatNavigation.h" />
+    <ClInclude Include="Camera.h" />
+    <ClInclude Include="CharacterController.h" />
+    <ClInclude Include="CompanionController.h" />
+    <ClInclude Include="CutoutImage.h" />
+    <ClInclude Include="DockSurface.h" />
+    <ClInclude Include="FloorUV.h" />
+    <ClInclude Include="Frustum.h" />
+    <ClInclude Include="FuegoCamino.h" />
+    <ClInclude Include="GroundSurface.h" />
+    <ClInclude Include="GuiaAntorchas.h" />
+    <ClInclude Include="GuiaArmPose.h" />
+    <ClInclude Include="KioskNpc.h" />
+    <ClInclude Include="LagunaAlmas.h" />
+    <ClInclude Include="LagunaDancer.h" />
+    <ClInclude Include="LagunaSpotLighting.h" />
+    <ClInclude Include="LakeFence.h" />
+    <ClInclude Include="Mesh.h" />
+    <ClInclude Include="Model.h" />
+    <ClInclude Include="MoonSky.h" />
+    <ClInclude Include="MovementSettings.h" />
+    <ClInclude Include="NpcDialogue.h" />
+    <ClInclude Include="OfrendaLighting.h" />
+    <ClInclude Include="RenderMetrics.h" />
+    <ClInclude Include="RenderState.h" />
+    <ClInclude Include="Shader.h" />
+    <ClInclude Include="SkeletalAnimator.h" />
+    <ClInclude Include="Skinning.h" />
+    <ClInclude Include="SolidObstacles.h" />
+    <ClInclude Include="Texture.h" />
+    <ClInclude Include="Texture2D.h" />
+    <ClInclude Include="TreeVegetation.h" />
+    <ClInclude Include="UnicodeIO.h" />
+    <ClInclude Include="WaterSurface.h" />
+    <ClInclude Include="WorldBoundaries.h" />
+    <ClInclude Include="ZocaloBackdrop.h" />
+    <ClInclude Include="ZocaloLighting.h" />
+    <ClInclude Include="stb_image.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Models\AxoloteEntrada\AxoloteEntrada.fbx" />
+    <None Include="Models\EntornoCompleto\Arboles.txt" />
+    <None Include="Models\EntornoCompleto\EntornoCompleto.mtl" />
+    <None Include="Models\EntornoCompleto\EntornoCompleto.zip" />
+    <None Include="Models\EntornoCompleto\Laguna\Agua\River_Water_Texture-427.jpg" />
+    <None Include="Models\EntornoCompleto\Laguna\Agua\WaterPlane.txt" />
+    <None Include="Models\EntornoCompleto\Laguna\Almas\AlmasTela.png" />
+    <None Include="Models\EntornoCompleto\Laguna\Almas\alma.mtl" />
+    <None Include="Models\EntornoCompleto\Laguna\Almas\alma.obj" />
+    <None Include="Models\EntornoCompleto\Laguna\Axolote\cementoTex.png" />
+    <None Include="Models\EntornoCompleto\Laguna\BaseEscultura\BaseEsculturaColor.png" />
+    <None Include="Models\EntornoCompleto\Laguna\CalacaEsc\CalacaColor.png" />
+    <None Include="Models\EntornoCompleto\Laguna\HumanoEsc\HumanoEscColor.png" />
+    <None Include="Models\EntornoCompleto\Laguna\LuzEsc\luzEscBaseColor.png" />
+    <None Include="Models\EntornoCompleto\Laguna\Piramide2\rock-stone-texture-seamless.jpg" />
+    <None Include="Models\EntornoCompleto\Laguna\SerpienteEsc\SerpienteEscColor.png" />
+    <None Include="Models\EntornoCompleto\Laguna\Tarima\natural-wooden-background.jpg" />
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\AccesoriosXolColor.png" />
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\MaleColorXolotl.png" />
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\PlumasColorXolotl.png" />
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\RopaXolotlColor.png" />
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\XolotlDanza.xanim" />
+    <None Include="Models\EntornoCompleto\Laguna\Xolotl\XolotlMaskColor.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\CuboBaseColor.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\FuegoBaseColor.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\Letrero_bienvenida.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\Piso_Aserrin_1.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\Piso_Aserrin_2.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\Piso_Aserrin_3.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\RampaBaseColor.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\TexturaTarima2.jpg" />
+    <None Include="Models\EntornoCompleto\Pasillo\VELABaseColor.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\facade.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\ladrilloOfrenda.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\letrero_Ofrenda.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\piso_ofrendaCempa.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\roof.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\tex_azucar.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\tex_cempasuchil.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\tex_chocolate.001.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\tex_florCempa.png" />
+    <None Include="Models\EntornoCompleto\Pasillo\tex_frutas.png" />
+    <None Include="Models\EntornoCompleto\Zocalo\Agua.png" />
+    <None Include="Models\EntornoCompleto\Zocalo\Banqueta.png" />
+    <None Include="Models\EntornoCompleto\Zocalo\Calle.png" />
+    <None Include="Models\EntornoCompleto\Zocalo\Gris.png" />
+    <None Include="Models\EntornoCompleto\Zocalo\Pasto.png" />
+    <None Include="Models\EntornoCompleto\Zocalo\Piedra.png" />
+    <None Include="Models\EntornoCompleto\Zocalo\Piso.png" />
+    <None Include="Models\EntornoCompleto\Zocalo\Piso_banqueta.png" />
+    <None Include="Models\EntornoCompleto\Zocalo\Textura_Kiosko.jpg" />
+    <None Include="Models\EntornoCompleto\Zocalo\Textura_MetalB.jpg" />
+    <None Include="Models\Farola\Farola.mtl" />
+    <None Include="Models\Farola\Farola.obj" />
+    <None Include="Models\Farola\Textura_MetalB.jpg" />
+    <None Include="Models\Farola\Textura_focoAzul.png" />
+    <None Include="Models\Fuego camino\Tex_fuegoCamino.png" />
+    <None Include="Models\Fuego camino\fuego_camino.mtl" />
+    <None Include="Models\Fuego camino\fuego_camino.obj" />
+    <None Include="Models\GuiaAntorcha\HombreGA.mtl" />
+    <None Include="Models\GuiaAntorcha\HombreGA_BrazoDer_Flex.obj" />
+    <None Include="Models\GuiaAntorcha\HombreGA_BrazoIzq_Flex.obj" />
+    <None Include="Models\GuiaAntorcha\HombreGA_Cuerpo.obj" />
+    <None Include="Models\GuiaAntorcha\MujerGA.mtl" />
+    <None Include="Models\GuiaAntorcha\MujerGA_BrazoDer_Flex.obj" />
+    <None Include="Models\GuiaAntorcha\MujerGA_BrazoIzq_Flex.obj" />
+    <None Include="Models\GuiaAntorcha\MujerGA_Cuerpo.obj" />
+    <None Include="Models\GuiaAntorcha\Tex_HombreGuia.png" />
+    <None Include="Models\GuiaAntorcha\Tex_MujerGuia.png" />
+    <None Include="Models\KioskNpcRig\KioskNpcRig.fbx" />
+    <None Include="Models\KioskNpcRig\textures\Textura_gorra.png" />
+    <None Include="Models\KioskNpcRig\textures\Textura_pantalon.png" />
+    <None Include="Models\KioskNpcRig\textures\Textura_playera.png" />
+    <None Include="Models\KioskNpcRig\textures\Textura_zapatos.png" />
     <None Include="Models\NinaRig\NinaRig.fbx" />
     <None Include="Models\NinaRig\arm-limits.txt" />
+    <None Include="Models\NinaRig\mocap\ATTRIBUTION.md" />
+    <None Include="Models\NinaRig\mocap\READMEFIRST.txt" />
+    <None Include="Models\NinaRig\textures\texture_00.png" />
+    <None Include="Models\NinaRig\textures\texture_01.png" />
+    <None Include="Models\NinaRig\textures\texture_02.png" />
+    <None Include="Models\NinaRig\textures\texture_03.png" />
+    <None Include="Models\NinaRig\textures\texture_04.png" />
+    <None Include="Models\NinaRig\textures\texture_05.png" />
+    <None Include="Models\NinaRig\textures\texture_06.png" />
+    <None Include="Models\NinaRig\textures\texture_07.png" />
+    <None Include="Models\Pan de muerto\PanMuerto.mtl" />
+    <None Include="Models\Pan de muerto\PanMuerto.obj" />
+    <None Include="Models\Pan de muerto\Texturapan.jpg" />
     <None Include="Models\XoloRig\XoloRig.fbx" />
-    <None Include="Models\XoloRig\textures\xolo_skin.png" />
     <None Include="Models\XoloRig\textures\xolo_features.jpg" />
-    <None Include="Models\EntornoCompleto\Laguna\Xolotl\XolotlDanza.fbx" />
-    <None Include="Models\EntornoCompleto\Laguna\Xolotl\XolotlDanza.xanim" />
-    <None Include="Models\EntornoCompleto\Laguna\Xolotl\XolotlDanza.blend" />
-    <None Include="tools\build_xolotl_rig_dance.py" />
+    <None Include="Models\XoloRig\textures\xolo_skin.png" />
+    <None Include="Models\barquito.mtl" />
+    <None Include="Models\barquito.obj" />
+    <None Include="Models\canasta.mtl" />
+    <None Include="Models\canasta.obj" />
+    <None Include="Shader\SkyBox.frag" />
+    <None Include="Shader\SkyBox.vs" />
+    <None Include="Shader\billboard.frag" />
+    <None Include="Shader\billboard.vs" />
+    <None Include="Shader\billboard_instanced.frag" />
+    <None Include="Shader\billboard_instanced.vs" />
+    <None Include="Shader\character.vs" />
+    <None Include="Shader\dialogue.frag" />
+    <None Include="Shader\dialogue.vs" />
+    <None Include="Shader\modelLoading.frag" />
+    <None Include="Shader\modelLoading.vs" />
+    <None Include="Shader\modelLoading_instanced.vs" />
+    <None Include="Shader\moon.frag" />
+    <None Include="Shader\moon.vs" />
+    <None Include="Shader\water.frag" />
+    <None Include="Shader\water.vs" />
+    <None Include="SkyBox\galaxy+X.tga" />
+    <None Include="SkyBox\galaxy+Y.tga" />
+    <None Include="SkyBox\galaxy+Z.tga" />
+    <None Include="SkyBox\galaxy-X.tga" />
+    <None Include="SkyBox\galaxy-Y.tga" />
+    <None Include="SkyBox\galaxy-Z.tga" />
     <None Include="images\Arbol_RGBA.png" />
+    <None Include="images\AxoloteDialogo0.png" />
+    <None Include="images\AxoloteDialogo1.png" />
+    <None Include="images\AxoloteDialogo2.png" />
+    <None Include="images\AxoloteDialogo3.png" />
     <None Include="images\Casa1.png" />
     <None Include="images\Casa2.png" />
     <None Include="images\Casa3.png" />
-    <None Include="images\Iglesia.png" />
     <None Include="images\Cerca_lago.png" />
-    <None Include="Shader\billboard.vs" />
-    <None Include="Shader\billboard_instanced.vs" />
-    <None Include="Shader\billboard_instanced.frag" />
-    <None Include="Shader\modelLoading_instanced.vs" />
-    <None Include="Shader\billboard.frag" />
-    <None Include="Shader\water.vs" />
-    <None Include="Shader\water.frag" />
-    <None Include="Models\EntornoCompleto\Laguna\Agua\WaterPlane.txt" />
-    <None Include="Models\EntornoCompleto\Laguna\Agua\River_Water_Texture-427.jpg" />
-    <None Include="Models\Farola\Farola.obj" />
-    <None Include="Models\barquito.obj" />
-    <None Include="Models\barquito.mtl" />
-    <None Include="Models\canasta.obj" />
-    <None Include="Models\canasta.mtl" />
+    <None Include="images\Iglesia.png" />
     <None Include="images\IvanovichDialogo.png" />
-    <None Include="Shader\dialogue.vs" />
-    <None Include="Shader\dialogue.frag" />
-    <None Include="Models\KioskNpcRig\KioskNpcRig.fbx" />
-    <None Include="Models\Pan de muerto\PanMuerto.obj" />
-    <None Include="Models\Pan de muerto\PanMuerto.mtl" />
-    <None Include="Models\Pan de muerto\Texturapan.jpg" />
     <None Include="images\MuelleMadera.png" />
-    <None Include="Models\Farola\Farola.mtl" />
-    <None Include="Shader\modelLoading.frag" />
-    <None Include="Shader\modelLoading.vs" />
-    <None Include="Shader\character.vs" />
-    <None Include="Shader\SkyBox.frag" />
-    <None Include="Shader\SkyBox.vs" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="Proyecto.cpp" />
+    <None Include="images\OfrendaInfo.png" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
@@ -238,18 +335,15 @@ copy /Y "$(ProjectDir)assimp-vc140-mt.dll" "$(OutDir)"</Command>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
-  <ItemGroup>
-    <ClInclude Include="AxoloteNpc.h" />
-    <ClInclude Include="SolidObstacles.h" />
-    <None Include="Models\AxoloteEntrada\AxoloteEntrada.fbx" />
-    <None Include="images\AxoloteDialogo0.png" />
-    <None Include="images\AxoloteDialogo1.png" />
-    <None Include="images\AxoloteDialogo2.png" />
-    <None Include="images\AxoloteDialogo3.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="MoonSky.h" />
-    <None Include="Shader\moon.vs" />
-    <None Include="Shader\moon.frag" />
-  </ItemGroup>
+
+  <!-- Extract the original scene losslessly using the MSBuild task. -->
+  <Target Name="PrepareEnvironmentModel" BeforeTargets="PrepareForBuild" Condition="!Exists('$(ProjectDir)Models\EntornoCompleto\EntornoCompleto.obj')">
+    <Error Condition="!Exists('$(ProjectDir)Models\EntornoCompleto\EntornoCompleto.zip')" Text="Falta Models/EntornoCompleto/EntornoCompleto.zip. Descarga todos los recursos del repositorio." />
+    <Message Text="Preparando EntornoCompleto.obj desde el recurso incluido..." Importance="high" />
+    <Unzip SourceFiles="$(ProjectDir)Models\EntornoCompleto\EntornoCompleto.zip" DestinationFolder="$(ProjectDir)Models\EntornoCompleto" />
+    <GetFileHash Files="$(ProjectDir)Models\EntornoCompleto\EntornoCompleto.obj" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_PreparedEnvironment" />
+    </GetFileHash>
+    <Error Condition="'%(_PreparedEnvironment.FileHash)' != '848C9ED69960685F835D8880E62C62AF7F58A253A9E2D5610C42DD0028A84249'" Text="El escenario extraido no coincide con el original. Revisa el archivo ZIP." />
+  </Target>
 </Project>

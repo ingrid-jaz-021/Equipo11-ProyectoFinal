@@ -1,16 +1,19 @@
 #pragma once
 #include <algorithm>
+#include <array>
 #include <iostream>
 #include <cmath>
+#include <stdexcept>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "Model.h"
 #include "GroundSurface.h"
 #include "Shader.h"
+#include "GuiaArmPose.h"
 
 // Control de los dos Guias con Antorcha utilizando Modelado Jerarquico Articulado
 // (Cinematica Directa) con extremidades independientes (torso, brazo derecho que se balancea
-// al costado, brazo izquierdo estirado al frente con la antorcha vertical) y guiado
+// al costado, brazo izquierdo flexionado al frente con la antorcha vertical) y guiado
 // por el pasillo de tapetes de aserrin con giro a la derecha en la esquina Z = -30 hacia el lago.
 class GuiaAntorchas
 {
@@ -30,7 +33,7 @@ public:
         ReturningMainCorridor   // Guiando de regreso a la entrada (+Z)
     };
 
-    void Configure(const Model& environment, const Model& hombreCuerpo, const Model& mujerCuerpo,
+    void Configure(const Model& hombreCuerpo, const Model& mujerCuerpo,
         const glm::vec3& sourceOrigin, float worldScale)
     {
         origin = sourceOrigin;
@@ -62,14 +65,12 @@ public:
         constexpr float targetBodyHeight = 5.6f;
         modelScale = targetBodyHeight / bodyHeightInModel; // ≈ 0.260f
 
-        // Articulaciones en la boca de la manga (el hueso emerge limpio sin vestimenta duplicada)
-        // HombreGA: manga derecha (-16.20, 12.60, -5.20), manga izquierda (-22.45, 12.60, -5.20)
-        hombreRightShoulder = glm::vec3(-16.20f, 12.60f, -5.20f) - hombreOrigin;
-        hombreLeftShoulder  = glm::vec3(-22.45f, 12.60f, -5.20f) - hombreOrigin;
-
-        // MujerGA: manga derecha (14.65, 13.50, -3.40), manga izquierda (8.40, 13.50, -3.40)
-        mujerRightShoulder  = glm::vec3(14.65f, 13.50f, -3.40f) - mujerOrigin;
-        mujerLeftShoulder   = glm::vec3(8.40f,  13.50f, -3.40f) - mujerOrigin;
+        // Source +Z is forward. The torch belongs to the +X arm in BOTH originals.
+        // Bind poses and attachment points are generated together in OBJ coordinates.
+        hombreRightShoulder = GuiaArmPose::HombreDerShoulder - hombreOrigin;
+        hombreLeftShoulder  = GuiaArmPose::HombreIzqShoulder - hombreOrigin;
+        mujerRightShoulder  = GuiaArmPose::MujerDerShoulder - mujerOrigin;
+        mujerLeftShoulder   = GuiaArmPose::MujerIzqShoulder - mujerOrigin;
 
         state = State::IdleAtEntrance;
         heading = 180.0f; // Mirando hacia el pasillo / lago (-Z)
@@ -115,7 +116,6 @@ public:
             if (onMainCorridor && playerWorld.z <= 246.0f && playerWorld.z >= 228.0f)
             {
                 state = State::GuidingMainCorridor;
-                std::cout << "GuiaAntorchas: Nina detectada en la entrada. Guiando por el pasillo principal." << std::endl;
             }
             break;
 
@@ -128,7 +128,6 @@ public:
             {
                 previousStateBeforeWaiting = State::GuidingMainCorridor;
                 state = State::WaitingForGirl;
-                std::cout << "GuiaAntorchas: Nina desviada o retrasada en pasillo principal. Esperando en Z = " << currentZ << std::endl;
                 break;
             }
 
@@ -149,7 +148,6 @@ public:
             {
                 currentZ = cornerZ;
                 state = State::TurningRightAtCorner;
-                std::cout << "GuiaAntorchas: Llegada a la esquina. Girando a la derecha hacia el camino de tapetes." << std::endl;
             }
             break;
 
@@ -162,7 +160,6 @@ public:
             {
                 heading = 90.0f;
                 state = State::GuidingRightCorridor;
-                std::cout << "GuiaAntorchas: Giro completado. Guiando por el camino lateral hacia el lago." << std::endl;
             }
             break;
 
@@ -175,7 +172,6 @@ public:
             {
                 previousStateBeforeWaiting = State::GuidingRightCorridor;
                 state = State::WaitingForGirl;
-                std::cout << "GuiaAntorchas: Nina desviada o retrasada en camino lateral. Esperando en X = " << currentX << std::endl;
                 break;
             }
 
@@ -196,7 +192,6 @@ public:
             {
                 currentX = lakeX;
                 state = State::OpeningAtLake;
-                std::cout << "GuiaAntorchas: Llegada al lago. Abriendo paso lateral para la nina." << std::endl;
             }
             break;
 
@@ -209,13 +204,11 @@ public:
                 if (onMainCorridor && (playerWorld.z - currentZ) <= 8.5f && (playerWorld.z - currentZ) >= -3.0f)
                 {
                     state = State::GuidingMainCorridor;
-                    std::cout << "GuiaAntorchas: Nina regreso al pasillo principal. Reanudando marcha." << std::endl;
                 }
                 // Si la nina retrocede mucho queriendo volver a la entrada
                 else if (onMainCorridor && playerWorld.z > currentZ + 18.0f)
                 {
                     state = State::ReturningMainCorridor;
-                    std::cout << "GuiaAntorchas: Nina retrocede hacia la entrada. Regresando." << std::endl;
                 }
             }
             else // previousStateBeforeWaiting == State::GuidingRightCorridor
@@ -224,12 +217,10 @@ public:
                 if (onRightCorridor && (currentX - playerWorld.x) <= 8.5f && (currentX - playerWorld.x) >= -3.0f)
                 {
                     state = State::GuidingRightCorridor;
-                    std::cout << "GuiaAntorchas: Nina regreso al camino lateral. Reanudando marcha hacia el lago." << std::endl;
                 }
                 else if (onRightCorridor && playerWorld.x < currentX - 16.0f)
                 {
                     state = State::TurningToReturn;
-                    std::cout << "GuiaAntorchas: Nina retrocede hacia la esquina. Iniciando retorno." << std::endl;
                 }
             }
             break;
@@ -243,7 +234,6 @@ public:
             if (playerWorld.x > currentX + 1.0f)
             {
                 state = State::PassedAtLake;
-                std::cout << "GuiaAntorchas: Nina paso por en medio hacia el lago. Guias en guardia lateral." << std::endl;
             }
             break;
 
@@ -254,7 +244,6 @@ public:
             if (playerWorld.x < lakeX - 1.5f && onRightCorridor)
             {
                 state = State::TurningToReturn;
-                std::cout << "GuiaAntorchas: Nina regresa del lago. Guias volteandose para guiar retorno." << std::endl;
             }
             break;
 
@@ -266,7 +255,6 @@ public:
             {
                 heading = 270.0f;
                 state = State::ReturningRightCorridor;
-                std::cout << "GuiaAntorchas: Giro completado. Guiando de regreso hacia la esquina." << std::endl;
             }
             break;
 
@@ -296,7 +284,6 @@ public:
             {
                 currentX = mainCorridorX;
                 state = State::TurningLeftAtCorner;
-                std::cout << "GuiaAntorchas: Llegada a la esquina en retorno. Girando a la izquierda hacia la entrada." << std::endl;
             }
             break;
 
@@ -309,7 +296,6 @@ public:
             {
                 heading = 0.0f;
                 state = State::ReturningMainCorridor;
-                std::cout << "GuiaAntorchas: Giro completado. Guiando de regreso por el pasillo principal hacia la entrada." << std::endl;
             }
             break;
 
@@ -339,7 +325,6 @@ public:
                 currentZ = corridorCenterZ;
                 state = State::IdleAtEntrance;
                 targetHeading = 180.0f;
-                std::cout << "GuiaAntorchas: Regreso completado a la entrada del pasillo." << std::endl;
             }
             break;
         }
@@ -409,7 +394,7 @@ public:
             // Extremidad articulada: Brazo derecho colgado al costado con balanceo pendular real
             rightArmSwing = 25.0f * std::sin(walkPhase);
 
-            // Brazo izquierdo: sostenido estirado al frente con oscilacion ceremonial muy suave
+            // Codo izquierdo flexionado en bind pose; leve oscilacion al llevar la antorcha.
             torchBobPitch = 1.8f * std::cos(walkPhase * 0.5f);
         }
         else
@@ -470,7 +455,7 @@ public:
         m = glm::rotate(m, glm::radians(torsoPitch), glm::vec3(1.0f, 0.0f, 0.0f));
         m = glm::rotate(m, glm::radians(-torsoRoll), glm::vec3(0.0f, 0.0f, 1.0f));
 
-        // Nivel 2: Articulacion del hombro izquierdo (estirado al frente con antorcha)
+        // Nivel 2: hombro izquierdo; el codo flexionado y la mano apuntan hacia +Z.
         m = glm::translate(m, hombreLeftShoulder);
         m = glm::rotate(m, glm::radians(torchBobPitch), glm::vec3(1.0f, 0.0f, 0.0f));
         return m;
@@ -524,52 +509,154 @@ public:
     // Posiciones en el mundo de las llamas de las antorchas para fuentes de luz puntual
     glm::vec3 TorchLightPositionHombre() const
     {
-        const glm::vec4 p = HombreBrazoIzqMatrix() * glm::vec4(-0.59f, 3.26f, -1.99f, 1.0f);
+        const glm::vec4 p = HombreBrazoIzqMatrix() * glm::vec4(GuiaArmPose::HombreTorch, 1.0f);
         return glm::vec3(p) / (p.w != 0.0f ? p.w : 1.0f);
     }
 
     glm::vec3 TorchLightPositionMujer() const
     {
-        const glm::vec4 p = MujerBrazoIzqMatrix() * glm::vec4(-0.19f, 3.35f, -3.21f, 1.0f);
+        const glm::vec4 p = MujerBrazoIzqMatrix() * glm::vec4(GuiaArmPose::MujerTorch, 1.0f);
         return glm::vec3(p) / (p.w != 0.0f ? p.w : 1.0f);
     }
 
-    // Actualiza las luces puntuales dinamicas (point lights) calidas/fuego con parpadeo organico
-    void UploadTorchLights(const Shader& shader, float now) const
+    struct TorchPointLight
     {
-        if (!configured) return;
-        shader.Use();
+        glm::vec3 position, diffuse, specular;
+        float constant, linear, quadratic, range;
+    };
+    using TorchFrame = std::array<TorchPointLight,2>;
 
-        // Parpadeo organico del fuego mediante combinacion de frecuencias
-        const float flickerH = 0.12f * std::sin(now * 15.3f) + 0.07f * std::sin(now * 27.7f) + 0.04f * std::cos(now * 41.1f);
-        const float flickerM = 0.12f * std::sin(now * 17.1f + 1.5f) + 0.07f * std::sin(now * 31.3f) + 0.04f * std::cos(now * 43.7f);
+    // Build once AFTER Update; reuse this same frame for static, skinned and
+    // instanced geometry. The socket is the measured center of each flame mesh.
+    TorchFrame TorchLightsAt(double now) const
+    {
+        TorchFrame lights;
+        const glm::vec3 positions[]={TorchLightPositionHombre(),TorchLightPositionMujer()};
+        const float worldUnit=std::max(scale,.0001f);
+        for(size_t i=0;i<lights.size();++i)
+        {
+            const double t=now*(1.0+i*.073),phase=i*2.39;
+            const float flicker=1.0f+static_cast<float>(.08*std::sin(t*7.1+phase)+
+                .045*std::sin(t*13.7+phase*1.7)+.025*std::sin(t*23.9+phase*.7));
+            lights[i]={positions[i],glm::vec3(1,.48f,.105f)*(2.65f*flicker),
+                glm::vec3(1,.64f,.27f)*(.38f*flicker),
+                1.0f,.14f/worldUnit,.07f/(worldUnit*worldUnit),14.0f*worldUnit};
+        }
+        return lights;
+    }
 
-        // Color fuego calido (luz ambar/dorada)
-        const glm::vec3 baseFireColor(1.0f, 0.58f, 0.16f);
-        const glm::vec3 colorHombre = baseFireColor * (1.65f + flickerH);
-        const glm::vec3 colorMujer  = baseFireColor * (1.65f + flickerM);
+    void UploadTorchLights(const Shader& shader,const TorchFrame& lights,const FrustumPlanes* planes=nullptr) const
+    {
+        shader.Use();int visible=0;
+        if(configured)for(const auto& light:lights)
+        {
+            // Retain off-screen flames when their light still reaches visible surfaces.
+            if(!LightSphereVisible(planes,light.position,light.range))continue;
+            const auto prefix="torchLights["+std::to_string(visible++)+"].";
+            glUniform3fv(shader.Uniform(prefix+"position"),1,&light.position[0]);
+            glUniform3fv(shader.Uniform(prefix+"diffuse"),1,&light.diffuse[0]);
+            glUniform3fv(shader.Uniform(prefix+"specular"),1,&light.specular[0]);
+            glUniform1f(shader.Uniform(prefix+"constant"),light.constant);
+            glUniform1f(shader.Uniform(prefix+"linear"),light.linear);
+            glUniform1f(shader.Uniform(prefix+"quadratic"),light.quadratic);
+            glUniform1f(shader.Uniform(prefix+"range"),light.range);
+        }
+        glUniform1i(shader.Uniform("torchLightCount"),visible);
+    }
 
-        constexpr float range = 24.0f; // Alcance para iluminar el suelo de aserrin y los personajes
-
-        const glm::vec3 posHombre = TorchLightPositionHombre();
-        const glm::vec3 posMujer  = TorchLightPositionMujer();
-
-        glUniform1i(shader.Uniform("torchLightCount"), 2);
-
-        glUniform3fv(shader.Uniform("torchLights[0].position"), 1, &posHombre[0]);
-        glUniform3fv(shader.Uniform("torchLights[0].color"), 1, &colorHombre[0]);
-        glUniform1f(shader.Uniform("torchLights[0].range"), range);
-
-        glUniform3fv(shader.Uniform("torchLights[1].position"), 1, &posMujer[0]);
-        glUniform3fv(shader.Uniform("torchLights[1].color"), 1, &colorMujer[0]);
-        glUniform1f(shader.Uniform("torchLights[1].range"), range);
+    void ValidateTorchLighting(const Shader& environment,const Shader& character,const Shader& instanced) const
+    {
+        GuiaAntorchas moving=*this;
+        const auto start=moving.TorchLightsAt(0);
+        const auto player=(glm::vec3(mainCorridorX,floorY,239)-origin)*scale;
+        for(int i=0;i<120;++i)moving.Update(1.0f/60,player,nullptr);
+        if(glm::distance(moving.TorchLightsAt(2)[0].position,start[0].position)<scale)
+            throw std::runtime_error("La luz de la antorcha no sigue al NPC.");
+        for(const Shader* shader:{&environment,&character,&instanced})
+        {
+            const glm::vec3 viewer(31,47,59);shader->Use();
+            glUniform3fv(shader->Uniform("viewPosition"),1,&viewer[0]);
+            glm::vec3 uploadedViewer(0);
+            glGetUniformfv(shader->Program,shader->Uniform("viewPosition"),&uploadedViewer[0]);
+            if(glm::distance(viewer,uploadedViewer)>.001f)throw std::runtime_error("Falta la camara para los reflejos del fuego.");
+            for(int direction=0;direction<4;++direction)
+            {
+                moving.heading=direction*90.0f;
+                const auto lights=moving.TorchLightsAt(2.0+direction*.37);
+                moving.UploadTorchLights(*shader,lights);
+                GLint count=0;glGetUniformiv(shader->Program,shader->Uniform("torchLightCount"),&count);
+                if(count!=2)throw std::runtime_error("Falta una antorcha en el shader.");
+                for(size_t i=0;i<lights.size();++i)
+                {
+                    const auto& light=lights[i];const auto prefix="torchLights["+std::to_string(i)+"].";
+                    auto vector=[&](const char* name,const glm::vec3& expected)
+                    {
+                        glm::vec3 value(0);const auto location=shader->Uniform(prefix+name);
+                        if(location<0)throw std::runtime_error("Uniform de antorcha ausente: "+prefix+name);
+                        glGetUniformfv(shader->Program,location,&value[0]);
+                        if(glm::distance(value,expected)>.001f)throw std::runtime_error("Uniform de antorcha desactualizado: "+prefix+name);
+                    };
+                    auto scalar=[&](const char* name,float expected)
+                    {
+                        float value=0;const auto location=shader->Uniform(prefix+name);
+                        if(location<0)throw std::runtime_error("Uniform de atenuacion ausente: "+prefix+name);
+                        glGetUniformfv(shader->Program,location,&value);
+                        if(std::abs(value-expected)>.00001f)throw std::runtime_error("Atenuacion de antorcha incorrecta.");
+                    };
+                    vector("position",light.position);vector("diffuse",light.diffuse);vector("specular",light.specular);
+                    scalar("constant",light.constant);scalar("linear",light.linear);
+                    scalar("quadratic",light.quadratic);scalar("range",light.range);
+                    const float floor=(floorY-origin.y)*scale;
+                    if(light.range<2*(light.position.y-floor))throw std::runtime_error("La antorcha no alcanza el piso.");
+                }
+            }
+            UploadTorchLights(*shader,TorchLightsAt(0));
+        }
+        const auto a=TorchLightsAt(0),b=TorchLightsAt(.19);
+        if(glm::distance(a[0].diffuse,b[0].diffuse)<.01f||glm::distance(a[1].diffuse,b[1].diffuse)<.01f)
+            throw std::runtime_error("Falta el parpadeo independiente de las antorchas.");
+        std::cout<<"Antorchas GPU OK: 2 luces moviles, 4 orientaciones, atenuacion y reflejos en 3 shaders; alcance hasta el piso."<<std::endl;
     }
 
     bool Configured() const { return configured; }
-    State CurrentState() const { return state; }
-    float CurrentZ() const { return currentZ; }
-    float CurrentX() const { return currentX; }
-    bool IsWalking() const { return isWalking; }
+
+    // Validation uses real model bounds and rendered attachment matrices. In particular
+    // it catches an importer-axis error or swapped shoulders even if OBJ loading succeeds.
+    void ValidateAnatomy(const Model& hombreArm, const Model& mujerArm) const
+    {
+        for (const Model* arm : { &hombreArm, &mujerArm })
+        {
+            const auto lo = arm->GetMinBounds(), hi = arm->GetMaxBounds();
+            if (lo.z < -1.8f || hi.z > 4.5f || hi.x-lo.x > 3.5f)
+                throw std::runtime_error("Guia: brazo fuera de su espacio anatomico; revisar ejes OBJ.");
+        }
+        auto check = [](const glm::mat4& body, const glm::mat4& arm,
+            const glm::vec3& shoulder, const glm::vec3& elbow, const glm::vec3& wrist)
+        {
+            const auto seam = body * glm::vec4(shoulder, 1);
+            if (glm::length(glm::vec3(seam-arm*glm::vec4(0,0,0,1))) > .001f)
+                throw std::runtime_error("Guia: brazo separado del hombro.");
+            const auto local = glm::inverse(body)*arm;
+            const auto e = glm::vec3(local*glm::vec4(elbow,1))-shoulder;
+            const auto w = glm::vec3(local*glm::vec4(wrist,1))-shoulder;
+            const float angle = glm::degrees(std::acos(glm::clamp(glm::dot(glm::normalize(e),glm::normalize(w-e)),-1.0f,1.0f)));
+            if (e.y > -1 || w.y > -.8f || w.z < 1.5f || std::abs(w.x) > .9f || angle < 75 || angle > 95)
+                throw std::runtime_error("Guia: codo recto o antorcha orientada hacia un lado.");
+        };
+        GuiaAntorchas probe = *this;
+        for (int direction=0; direction<4; ++direction)
+            for (int phase=0; phase<24; ++phase)
+            {
+                probe.heading=direction*90.0f;
+                probe.torsoPitch=2;probe.torsoRoll=1.8f*std::sin(phase*.3f);
+                probe.torchBobPitch=1.8f*std::cos(phase*.3f);
+                check(probe.HombreCuerpoMatrix(),probe.HombreBrazoIzqMatrix(),
+                    GuiaArmPose::HombreIzqShoulder,GuiaArmPose::HombreIzqElbow,GuiaArmPose::HombreIzqWrist);
+                check(probe.MujerCuerpoMatrix(),probe.MujerBrazoIzqMatrix(),
+                    GuiaArmPose::MujerIzqShoulder,GuiaArmPose::MujerIzqElbow,GuiaArmPose::MujerIzqWrist);
+            }
+        std::cout << "Guias OK: codos flexionados, manos al frente y hombros unidos en 4 orientaciones." << std::endl;
+    }
 
 private:
     glm::vec3 hombrePos = glm::vec3(0.0f);

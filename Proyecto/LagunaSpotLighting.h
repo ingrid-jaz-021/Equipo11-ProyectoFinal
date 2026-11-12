@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <unordered_map>
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -106,19 +107,23 @@ public:
         targetWorld = (target - sourceOrigin) * worldScale;
     }
 
-    void Upload(const Shader& shader) const
+    void Upload(const Shader& shader,const FrustumPlanes* planes=nullptr) const
     {
-        shader.Use();
-        glUniform1i(shader.Uniform("spotLightCount"), static_cast<int>(spots.size()));
-        for (size_t i = 0; i < spots.size(); ++i)
+        std::vector<size_t> visible;
+        for(size_t i=0;i<spots.size();++i)if(LightSphereVisible(planes,spots[i].position,spots[i].range))visible.push_back(i);
+        const auto old=uploaded.find(shader.Program);
+        if(old!=uploaded.end()&&old->second==visible)return;
+        uploaded[shader.Program]=visible;shader.Use();
+        glUniform1i(shader.Uniform("spotLightCount"),static_cast<int>(visible.size()));
+        for(size_t slot=0;slot<visible.size();++slot)
         {
-            const std::string prefix = "spotLights[" + std::to_string(i) + "].";
-            glUniform3fv(glGetUniformLocation(shader.Program, (prefix + "position").c_str()), 1, &spots[i].position[0]);
-            glUniform3fv(glGetUniformLocation(shader.Program, (prefix + "direction").c_str()), 1, &spots[i].direction[0]);
-            glUniform3f(glGetUniformLocation(shader.Program, (prefix + "color").c_str()), 0.08f, 0.42f, 3.2f);
-            glUniform1f(glGetUniformLocation(shader.Program, (prefix + "range").c_str()), spots[i].range);
-            glUniform1f(glGetUniformLocation(shader.Program, (prefix + "innerCutoff").c_str()), std::cos(glm::radians(17.0f)));
-            glUniform1f(glGetUniformLocation(shader.Program, (prefix + "outerCutoff").c_str()), std::cos(glm::radians(31.0f)));
+            const auto& spot=spots[visible[slot]];const auto prefix="spotLights["+std::to_string(slot)+"].";
+            glUniform3fv(shader.Uniform(prefix+"position"),1,&spot.position[0]);
+            glUniform3fv(shader.Uniform(prefix+"direction"),1,&spot.direction[0]);
+            glUniform3f(shader.Uniform(prefix+"color"),.08f,.42f,3.2f);
+            glUniform1f(shader.Uniform(prefix+"range"),spot.range);
+            glUniform1f(shader.Uniform(prefix+"innerCutoff"),std::cos(glm::radians(17.0f)));
+            glUniform1f(shader.Uniform(prefix+"outerCutoff"),std::cos(glm::radians(31.0f)));
         }
     }
 
@@ -134,6 +139,7 @@ public:
     }
 
 private:
+    mutable std::unordered_map<GLuint,std::vector<size_t>> uploaded;
     std::vector<Spot> spots;
     glm::vec3 targetWorld = glm::vec3(0.0f);
 };

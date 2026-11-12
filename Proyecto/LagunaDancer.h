@@ -52,13 +52,18 @@ public:
         configured = true;
     }
 
-    void Update(Model& dancer, float dt)
+    void Update(float dt)
     {
         if (!configured) return;
         elapsed += (std::max)(dt, 0.0f);
-        dancer.UpdateBakedAnimation(elapsed);
+        // El reloj avanza siempre; la interpolacion/subida GPU se hace solo si se ve.
     }
 
+    bool PrepareVisible(Model& dancer,const glm::mat4& viewProjection) const
+    {
+        if(!configured||!TransformedBoundsVisible(ExtractFrustum(viewProjection),dancer.GetMinBounds(),dancer.GetMaxBounds(),ModelMatrix(dancer)))return false;
+        dancer.UpdateBakedAnimation(elapsed);return true;
+    }
     glm::mat4 ModelMatrix(const Model& dancer) const
     {
         glm::mat4 model = glm::translate(glm::mat4(1.0f), position);

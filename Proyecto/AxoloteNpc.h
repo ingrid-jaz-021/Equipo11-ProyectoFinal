@@ -60,7 +60,7 @@ public:
     }
     bool DialogueVisible() const{return nearby&&page<3;}
     int MessageIndex() const{return page;}
-    void DrawDialogue(int width,int height) const{if(DialogueVisible())dialogue.DrawPanel(static_cast<size_t>(page+1),width,height);}
+    void DrawDialogue(int width,int framebufferHeight) const{if(DialogueVisible())dialogue.DrawPanel(static_cast<size_t>(page+1),width,framebufferHeight);}
     glm::vec3 Approach() const{return position+glm::vec3(0,0,3*worldScale);}
     glm::vec3 ViewTarget() const{return glm::mix(position+glm::vec3(0,height*.48f,0),signCenter,.40f);}
     glm::vec3 ViewEye() const{return ViewTarget()+glm::vec3(height*.55f,height*.27f,height*2.75f);}

@@ -42,6 +42,7 @@
 #include "AxoloteNpc.h"
 #include "SolidObstacles.h"
 #include "MoonSky.h"
+#include "WorldBoundaries.h"
 
 namespace
 {
@@ -58,6 +59,7 @@ CameraMode cameraMode = CameraMode::ThirdPerson;
 BoatNavigation* activeBoat=nullptr; // Propiedad de RunScene; callbacks solo durante su vida.
 AxoloteNpc* activeAxolote=nullptr;
 SolidObstacles* activeDoors=nullptr;
+WorldBoundaries* activeBoundaries=nullptr;
 bool vsyncEnabled=false;
 bool firstMouse = true;
 double lastX = 0.0, lastY = 0.0;
@@ -122,10 +124,10 @@ void KeyCallback(GLFWwindow* window, int key, int, int action, int)
 {
     if (action != GLFW_PRESS) return;
     if (key == GLFW_KEY_ESCAPE) glfwSetWindowShouldClose(window, GLFW_TRUE);
-    if(key==GLFW_KEY_V){vsyncEnabled=!vsyncEnabled;glfwSwapInterval(vsyncEnabled?1:0);std::cout<<"V-Sync "<<(vsyncEnabled?"activado":"desactivado")<<" (V)."<<std::endl;}
+    if(key==GLFW_KEY_V){vsyncEnabled=!vsyncEnabled;glfwSwapInterval(vsyncEnabled?1:0);}
     // F: pausa seguimiento del xolo; olfatea, gira y da un paso de carrera.
-    if(key==GLFW_KEY_F&&(!activeBoat||!activeBoat->IsNavigating())&&companion.TriggerSpecial())
-        std::cout<<"Xolo: olfatear -> giro -> paso de carrera; despues vuelve al lado de la nina."<<std::endl;
+    if(key==GLFW_KEY_F&&(!activeBoat||!activeBoat->IsNavigating()))
+        companion.TriggerSpecial();
     if (key == GLFW_KEY_C)
     {
         cameraMode = cameraMode == CameraMode::ThirdPerson ? CameraMode::Free : CameraMode::ThirdPerson;
@@ -141,11 +143,7 @@ void KeyCallback(GLFWwindow* window, int key, int, int action, int)
     // E en tercera persona: subir/bajar. En camara libre sigue siendo ascenso.
     if(key==GLFW_KEY_E&&cameraMode==CameraMode::ThirdPerson&&activeBoat)
     {
-        const auto action=activeBoat->Interact(player,companion);
-        if(action==BoatNavigation::Interaction::Boarded)std::cout<<"Navegando: W/S avanzar/retroceder, A/D timon, Shift acelerar, E desembarcar."<<std::endl;
-        else if(action==BoatNavigation::Interaction::Disembarked)std::cout<<"Caminando: nina y xolo en tierra firme; bote anclado."<<std::endl;
-        else if(action==BoatNavigation::Interaction::NoLanding)std::cout<<"Acercate al muelle o a una orilla para desembarcar."<<std::endl;
-        else std::cout<<"Acercate al bote para embarcar con E."<<std::endl;
+        activeBoat->Interact(player,companion);
         UpdateFollowCamera(0,true);UpdateWindowTitle(window);
     }
     if (key == GLFW_KEY_TAB)
@@ -191,10 +189,12 @@ void SimulateFrame(glm::vec2 input,bool sprint,float vertical,float dt,const Gro
         {
             if(activeDoors&&cameraMode==CameraMode::ThirdPerson)activeDoors->Resolve(player,before);
             if(activeBoat&&cameraMode==CameraMode::ThirdPerson)activeBoat->GuardWalking(player,before);
+            if(activeBoundaries&&ground&&cameraMode==CameraMode::ThirdPerson)activeBoundaries->Resolve(player,before,*ground);
             if(ground&&cameraMode==CameraMode::ThirdPerson)player.ConformToGround(*ground,SOURCE_SPAWN,ENVIRONMENT_SCALE,step);
             companion.UpdateCompanion(player,ground,SOURCE_SPAWN,ENVIRONMENT_SCALE,step,false);
             if(activeDoors)activeDoors->Resolve(companion,petBefore);
             if(activeBoat)activeBoat->GuardWalking(companion,petBefore);
+            if(activeBoundaries&&ground)activeBoundaries->Resolve(companion,petBefore,*ground);
         }
     }
     // Evaluar cada esqueleto UNA vez por frame, no por cada subpaso fisico.
@@ -688,6 +688,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         probe.ValidateDockAccess(player,companion);probe.Validate(player,companion);ResetScene();
     }
     GroundSurface ground;
+    WorldBoundaries boundaries;
     std::unique_ptr<Model> environment;
     if (!characterOnly)
     {
@@ -699,12 +700,17 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         lagunaAlmas.Configure(*environment, almaModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
         glfwSetWindowTitle(window, "Cargando guias con antorcha...");
         hombreCuerpoModel = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA_Cuerpo.obj", keepLoading);
-        hombreBrazoDerModel = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA_BrazoDer.obj", keepLoading);
-        hombreBrazoIzqModel = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA_BrazoIzq.obj", keepLoading);
+        hombreBrazoDerModel = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA_BrazoDer_Flex.obj", keepLoading);
+        hombreBrazoIzqModel = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA_BrazoIzq_Flex.obj", keepLoading);
         mujerCuerpoModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA_Cuerpo.obj", keepLoading);
-        mujerBrazoDerModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA_BrazoDer.obj", keepLoading);
-        mujerBrazoIzqModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA_BrazoIzq.obj", keepLoading);
-        guiaAntorchas.Configure(*environment, *hombreCuerpoModel, *mujerCuerpoModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
+        mujerBrazoDerModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA_BrazoDer_Flex.obj", keepLoading);
+        mujerBrazoIzqModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA_BrazoIzq_Flex.obj", keepLoading);
+        guiaAntorchas.Configure(*hombreCuerpoModel, *mujerCuerpoModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
+        if (validate)
+        {
+            guiaAntorchas.ValidateAnatomy(*hombreBrazoIzqModel,*mujerBrazoIzqModel);
+            guiaAntorchas.ValidateTorchLighting(environmentShader,characterShader,lampShader);
+        }
         glfwSetWindowTitle(window, "Cargando fuego del camino...");
         fuegoCaminoModel = std::make_unique<Model>("Models/Fuego camino/fuego_camino.obj", keepLoading);
         fuegoCamino.Build(&ground, SOURCE_SPAWN, ENVIRONMENT_SCALE);
@@ -730,7 +736,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     plazaLights.Upload(characterShader);
     plazaLights.Upload(lampShader);
     std::vector<glm::mat4> lampModels;lampModels.reserve(plazaLights.instances.size());
-    for(const auto& lamp:plazaLights.instances)lampModels.push_back(lamp.model);
+    for(const auto& instance:plazaLights.instances)lampModels.push_back(instance.model);
     std::cout << "Zocalo: 12 farolas (8 interiores y 4 exteriores), focos alineados con su cristal." << std::endl;
     LagunaSpotLighting lagoonLights;
     OfrendaLighting ofrendaLights;
@@ -775,6 +781,9 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         activeBoat=navigation.get();
         if(validate){navigation->ValidateDockAccess(player,companion);navigation->Validate(player,companion);ResetScene();}
         if(validate)water->ValidateAnimation();
+        boundaries.Build(*environment,ground,SOURCE_SPAWN,ENVIRONMENT_SCALE,water->SourceMin(),water->SourceMax());
+        if(validate)boundaries.Validate(ground);
+        activeBoundaries=&boundaries;
     }
     Skybox skybox;
     UpdateWindowTitle(window);
@@ -791,22 +800,30 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     CheckOpenGL("carga de modelos, rig y cubemap");
     const float sceneDiagonal = environment
         ? glm::length(environment->GetMaxBounds() - environment->GetMinBounds()) * ENVIRONMENT_SCALE : 1000.0f;
-    std::cout << "Altura personaje: " << MovementSettings::CharacterHeight << "; velocidad: " << MovementSettings::WalkSpeed
-        << "/" << MovementSettings::RunSpeed << "; camara: " << MovementSettings::FlySpeed << "/" << MovementSettings::FlyFastSpeed << std::endl;
-    std::cout << "WASD: personaje | Shift: correr | C: cambiar camara | R: reiniciar\n"
-        << "Camara libre: WASD + E/Q (personaje congelado) | Raton: mirar | Rueda: zoom\n"
-        << "Tab: cursor | V: alternar V-Sync (inicia desactivado) | Esc: salir" << std::endl;
-    std::cout<<"F: xolo olfatea, gira y avanza; despues retoma el seguimiento."<<std::endl;
-    std::cout<<"E: embarcar/desembarcar cerca del bote, muelle u orilla. Navegando: W/S motor, A/D timon; ambos pasajeros inmoviles."<<std::endl;
+    std::cout << "\n================ CONTROLES ================\n"
+        << "A PIE        WASD: mover a la nina | Shift izquierdo: correr\n"
+        << "CAMARAS      C: alternar tercera persona / libre\n"
+        << "             Raton: mirar u orbitar | Rueda: zoom / campo de vision\n"
+        << "CAMARA LIBRE WASD: volar | E: subir | Q: bajar | Shift izquierdo: acelerar\n"
+        << "             La nina y los pasajeros permanecen inmoviles.\n"
+        << "XOLO         F: olfatear, girar y avanzar; retoma el seguimiento (fuera del bote)\n"
+        << "BOTE         E: embarcar cerca; desembarcar junto a muelle u orilla\n"
+        << "             A bordo: W/S avanzar/retroceder | A/D timon | Shift: acelerar\n"
+        << "DIALOGOS     G: hablar con el ajolote, avanzar mensajes y cerrar\n"
+        << "             Ivanovich y la ofrenda: informacion automatica al acercarse\n"
+        << "GENERAL      R: reiniciar escena o camara libre | Tab: liberar/capturar cursor\n"
+        << "             V: alternar V-Sync | Esc: salir\n"
+        << "==========================================\n" << std::flush;
 
     double previous = glfwGetTime();
     FrameProfiler profiler(profiling);
     int frame = 0;
+    std::vector<glm::mat4> almaInstances;almaInstances.reserve(LagunaAlmas::Count*LagunaAlmas::RowCount);
     unsigned dialogueNearSamples=0,dialogueFarSamples=0,axoloteDialogueSamples=0,ofrendaDialogueSamples=0;
     glm::vec3 pausedBoat(0);std::vector<glm::mat4> pausedHuman,pausedDog;
     while (!glfwWindowShouldClose(window))
     {
-        const double now = glfwGetTime();
+        const double now = validate ? frame/60.0 : glfwGetTime();
         const float dt = validate ? 1.0f / 60.0f : glm::clamp(static_cast<float>(now-previous),0.0f,.25f);
         previous = now;
         profiler.BeginFrame(frame);
@@ -814,6 +831,8 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         glfwPollEvents();
         if (validate)
         {
+            if (environment && frame == 145)
+                player.position = (glm::vec3(-114.75f,1.776f,239.0f)-SOURCE_SPAWN)*ENVIRONMENT_SCALE;
             glm::vec2 input = frame > 0 && frame < 70 ? glm::vec2(0, 1) : glm::vec2(0);
             if (frame == 90) KeyCallback(window, GLFW_KEY_C, 0, GLFW_PRESS, 0);
             if (frame == 110) KeyCallback(window, GLFW_KEY_C, 0, GLFW_PRESS, 0);
@@ -867,7 +886,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             SimulateFrame(input,frame>=35&&frame<65,0,dt,environment?&ground:nullptr);
         }
         else DoMovement(window,dt,environment?&ground:nullptr);
-        if (lagunaDancerModel) lagunaDancer.Update(*lagunaDancerModel, dt);
+        if (lagunaDancerModel) lagunaDancer.Update(dt);
         lagunaAlmas.Update(dt);
         UpdateFollowCamera(dt);
         npc.UpdateNpc(dt);
@@ -912,6 +931,16 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
                 const glm::vec3 eye(-464.0f, 140.0f, -680.0f);
                 SetValidationCamera(eye, target);
                 player.position = glm::vec3(-463.5f, 0.0f, -800.0f);
+            }
+            if (frame >= 151 && frame <= 154)
+            {
+                // Close front/profile views of each carrying elbow while the guides walk.
+                const bool woman=frame>=153, profile=frame==152||frame==154;
+                const auto m=woman?guiaAntorchas.MujerCuerpoMatrix():guiaAntorchas.HombreCuerpoMatrix();
+                const auto shoulder=woman?GuiaArmPose::MujerIzqShoulder:GuiaArmPose::HombreIzqShoulder;
+                const auto focus=shoulder+glm::vec3(0,-.5f,1.0f);
+                const auto eye=focus+(profile?glm::vec3(10,1,0):glm::vec3(5,2,10));
+                SetValidationCamera(glm::vec3(m*glm::vec4(eye,1)),glm::vec3(m*glm::vec4(focus,1)));
             }
             if(frame==200)
                 SetValidationCamera(backdrop->Center()+glm::vec3(1300,1150,-1300),backdrop->Center());
@@ -1036,65 +1065,97 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         const float fov = cameraMode == CameraMode::Free ? freeCamera.GetZoom() : 45.0f;
         const glm::mat4 projection = glm::perspective(glm::radians(fov), static_cast<float>(width) / height,
             0.02f * ENVIRONMENT_SCALE, std::max(moon.FarPlane(eye),std::max(10000.0f,sceneDiagonal*1.5f+glm::length(eye))));
+        const auto lightPlanes=ExtractFrustum(projection*view);
+        for (const Shader* shader : { &environmentShader, &characterShader, &lampShader })
+        {
+            shader->Use();glUniform3fv(shader->Uniform("viewPosition"),1,&eye[0]);
+        }
+        lagoonLights.Upload(environmentShader,&lightPlanes);
+        lagoonLights.Upload(characterShader,&lightPlanes);
+        lagoonLights.Upload(lampShader,&lightPlanes);
         if (guiaAntorchas.Configured())
         {
-            guiaAntorchas.UploadTorchLights(environmentShader, static_cast<float>(now));
-            guiaAntorchas.UploadTorchLights(characterShader, static_cast<float>(now));
-            guiaAntorchas.UploadTorchLights(lampShader, static_cast<float>(now));
+            const auto torchFrame=guiaAntorchas.TorchLightsAt(now);
+            guiaAntorchas.UploadTorchLights(environmentShader,torchFrame,&lightPlanes);
+            guiaAntorchas.UploadTorchLights(characterShader,torchFrame,&lightPlanes);
+            guiaAntorchas.UploadTorchLights(lampShader,torchFrame,&lightPlanes);
         }
         if (ofrendaLights.Configured())
         {
-            ofrendaLights.Upload(environmentShader, static_cast<float>(now));
-            ofrendaLights.Upload(characterShader, static_cast<float>(now));
-            ofrendaLights.Upload(lampShader, static_cast<float>(now));
+            ofrendaLights.Upload(environmentShader, static_cast<float>(now),&lightPlanes);
+            ofrendaLights.Upload(characterShader, static_cast<float>(now),&lightPlanes);
+            ofrendaLights.Upload(lampShader, static_cast<float>(now),&lightPlanes);
         }
         if (fuegoCamino.Configured())
         {
-            fuegoCamino.UploadLights(environmentShader, static_cast<float>(now));
-            fuegoCamino.UploadLights(characterShader, static_cast<float>(now));
-            fuegoCamino.UploadLights(lampShader, static_cast<float>(now));
+            fuegoCamino.UploadLights(environmentShader, static_cast<float>(now),&lightPlanes);
+            fuegoCamino.UploadLights(characterShader, static_cast<float>(now),&lightPlanes);
+            fuegoCamino.UploadLights(lampShader, static_cast<float>(now),&lightPlanes);
         }
-        if (environment)
+        const auto drawOpaqueScene = [&]()
         {
-            glm::mat4 model = glm::translate(glm::mat4(1), ENVIRONMENT_TRANSLATION);
-            model = glm::scale(model, glm::vec3(ENVIRONMENT_SCALE));
-            DrawObject(*environment, environmentShader, model, view, projection);
-            lamp.DrawInstances(lampShader,lampModels,projection*view);
-            navigation->DrawShore(environmentShader,view,projection);
-            DrawObject(boatModel,environmentShader,navigation->ModelMatrix(),view,projection);
-            navigation->DrawMarker(environmentShader,view,projection,now);
-            if (fuegoCaminoModel && fuegoCamino.Configured())
+            if (environment)
             {
-                for (const auto& m : fuegoCamino.Matrices())
-                {
-                    DrawObject(*fuegoCaminoModel, environmentShader, m, view, projection);
-                }
+                glm::mat4 model = glm::translate(glm::mat4(1), ENVIRONMENT_TRANSLATION);
+                model = glm::scale(model, glm::vec3(ENVIRONMENT_SCALE));
+                DrawObject(*environment, environmentShader, model, view, projection);
+                lamp.DrawInstances(lampShader,lampModels,projection*view);
+                navigation->DrawShore(environmentShader,view,projection);
+                DrawObject(boatModel,environmentShader,navigation->ModelMatrix(),view,projection);
+                navigation->DrawMarker(environmentShader,view,projection,now);
+                if(fuegoCaminoModel&&fuegoCamino.Configured())fuegoCaminoModel->DrawInstances(lampShader,fuegoCamino.Matrices(),projection*view);
             }
-        }
-        DrawObject(axoloteModel,characterShader,axolote.ModelMatrix(),view,projection,&axolote);
-        DrawObject(basketModel,environmentShader,npc.BasketMatrix(),view,projection);
-        DrawObject(npcModel,characterShader,npc.WorldMatrix(),view,projection,&npc);
-        if(npc.BreadVisible())DrawObject(breadModel,environmentShader,npc.BreadMatrix(),view,projection);
-        DrawObject(girl, characterShader, player.ModelMatrix(), view, projection, &player);
-        DrawObject(dog,characterShader,companion.ModelMatrix(),view,projection,&companion);
-        if (lagunaDancerModel && lagunaDancer.Configured())
-            DrawObject(*lagunaDancerModel,environmentShader,lagunaDancer.ModelMatrix(*lagunaDancerModel),view,projection);
-        if (lagunaAlmas.Configured())
-            for (size_t row = 0; row < LagunaAlmas::RowCount; ++row)
-                for (size_t i = 0; i < LagunaAlmas::Count; ++i)
-                    DrawObject(almaModel, environmentShader, lagunaAlmas.ModelMatrix(almaModel, i, row), view, projection);
-        if (guiaAntorchas.Configured() && hombreCuerpoModel && mujerCuerpoModel)
-        {
-            // Hombre: Torso base, Brazo Derecho articulado oscilando al costado, Brazo Izquierdo estirado al frente con antorcha
-            DrawObject(*hombreCuerpoModel, environmentShader, guiaAntorchas.HombreCuerpoMatrix(), view, projection);
-            if (hombreBrazoDerModel) DrawObject(*hombreBrazoDerModel, environmentShader, guiaAntorchas.HombreBrazoDerMatrix(), view, projection);
-            if (hombreBrazoIzqModel) DrawObject(*hombreBrazoIzqModel, environmentShader, guiaAntorchas.HombreBrazoIzqMatrix(), view, projection);
+            DrawObject(axoloteModel,characterShader,axolote.ModelMatrix(),view,projection,&axolote);
+            DrawObject(basketModel,environmentShader,npc.BasketMatrix(),view,projection);
+            DrawObject(npcModel,characterShader,npc.WorldMatrix(),view,projection,&npc);
+            if(npc.BreadVisible())DrawObject(breadModel,environmentShader,npc.BreadMatrix(),view,projection);
+            DrawObject(girl, characterShader, player.ModelMatrix(), view, projection, &player);
+            DrawObject(dog,characterShader,companion.ModelMatrix(),view,projection,&companion);
+            if (lagunaDancerModel && lagunaDancer.PrepareVisible(*lagunaDancerModel,projection*view))
+                DrawObject(*lagunaDancerModel,environmentShader,lagunaDancer.ModelMatrix(*lagunaDancerModel),view,projection);
+            if(lagunaAlmas.Configured())
+            {
+                almaInstances.clear();
+                for(size_t row=0;row<LagunaAlmas::RowCount;++row)for(size_t i=0;i<LagunaAlmas::Count;++i)
+                    almaInstances.push_back(lagunaAlmas.ModelMatrix(almaModel,i,row));
+                almaModel.DrawInstances(lampShader,almaInstances,projection*view);
+            }
+            if (guiaAntorchas.Configured() && hombreCuerpoModel && mujerCuerpoModel)
+            {
+                // Hombre: Torso base, Brazo Derecho articulado oscilando al costado, Brazo Izquierdo flexionado al frente con antorcha
+                DrawObject(*hombreCuerpoModel, environmentShader, guiaAntorchas.HombreCuerpoMatrix(), view, projection);
+                if (hombreBrazoDerModel) DrawObject(*hombreBrazoDerModel, environmentShader, guiaAntorchas.HombreBrazoDerMatrix(), view, projection);
+                if (hombreBrazoIzqModel) DrawObject(*hombreBrazoIzqModel, environmentShader, guiaAntorchas.HombreBrazoIzqMatrix(), view, projection);
 
-            // Mujer: Torso base, Brazo Derecho articulado oscilando al costado, Brazo Izquierdo estirado al frente con antorcha
-            DrawObject(*mujerCuerpoModel, environmentShader, guiaAntorchas.MujerCuerpoMatrix(), view, projection);
-            if (mujerBrazoDerModel) DrawObject(*mujerBrazoDerModel, environmentShader, guiaAntorchas.MujerBrazoDerMatrix(), view, projection);
-            if (mujerBrazoIzqModel) DrawObject(*mujerBrazoIzqModel, environmentShader, guiaAntorchas.MujerBrazoIzqMatrix(), view, projection);
+                // Mujer: Torso base, Brazo Derecho articulado oscilando al costado, Brazo Izquierdo flexionado al frente con antorcha
+                DrawObject(*mujerCuerpoModel, environmentShader, guiaAntorchas.MujerCuerpoMatrix(), view, projection);
+                if (mujerBrazoDerModel) DrawObject(*mujerBrazoDerModel, environmentShader, guiaAntorchas.MujerBrazoDerMatrix(), view, projection);
+                if (mujerBrazoIzqModel) DrawObject(*mujerBrazoIzqModel, environmentShader, guiaAntorchas.MujerBrazoIzqMatrix(), view, projection);
+            }
+        };
+        if (validate && environment && frame==150)
+        {
+            // Same geometry, pose, camera and time: only the torch contribution changes.
+            for(const Shader* shader:{&environmentShader,&characterShader,&lampShader})
+            { shader->Use();glUniform1i(shader->Uniform("torchLightCount"),0); }
+            drawOpaqueScene();
+            std::vector<unsigned char> unlit(static_cast<size_t>(width)*height*4),lit(unlit.size());
+            glReadPixels(0,0,width,height,GL_RGBA,GL_UNSIGNED_BYTE,unlit.data());
+            if(!capture.empty())SaveFramebuffer(capture+"-torches-off.tga",width,height);
+            glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+            const auto torchFrame=guiaAntorchas.TorchLightsAt(now);
+            for(const Shader* shader:{&environmentShader,&characterShader,&lampShader})
+                guiaAntorchas.UploadTorchLights(*shader,torchFrame,&lightPlanes);
+            drawOpaqueScene();
+            glReadPixels(0,0,width,height,GL_RGBA,GL_UNSIGNED_BYTE,lit.data());
+            size_t changed=0,lower=0;
+            for(size_t p=0;p<lit.size();p+=4)if(lit[p]>unlit[p]+2)
+            { ++changed;if(p/4/static_cast<size_t>(width)<static_cast<size_t>(height*0.4f))++lower; }
+            if(changed<500||lower<40)throw std::runtime_error("Las antorchas no iluminan la geometria/piso del pasillo.");
+            if(!capture.empty())SaveFramebuffer(capture+"-torches-on.tga",width,height);
+            std::cout<<"Antorchas render OK: "<<changed<<" pixeles reciben luz calida; "<<lower<<" en la zona inferior/piso."<<std::endl;
         }
+        else drawOpaqueScene();
         moon.Draw(view,projection,eye);
         if(water)water->Draw(view,projection,eye,now);
         glDepthFunc(GL_LEQUAL);
@@ -1129,7 +1190,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             if(showDialogue!=dialogueApproachTest)throw std::runtime_error("El dialogo no aparece/desaparece por proximidad real de la nina.");
             if(showDialogue)++dialogueNearSamples;else ++dialogueFarSamples;
         }
-        if (validate && (frame==moonFrame || captureAxolote || captureNpc || captureBoat || captureAction || frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || frame == 155 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 305 || frame == 310 || frame == 315 || frame == 320 || frame == 325 || frame == 330 || frame == 335 || frame == 350 || frame == 390 || frame == 775))
+        if (validate && (frame==moonFrame || captureAxolote || captureNpc || captureBoat || captureAction || frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || (frame >= 151 && frame <= 154) || frame == 155 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 305 || frame == 310 || frame == 315 || frame == 320 || frame == 325 || frame == 330 || frame == 335 || frame == 350 || frame == 390 || frame == 775))
         {
             std::vector<float> depth(static_cast<size_t>(width) * height);
             glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, depth.data());
@@ -1158,7 +1219,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         if (!validate) ++frame;
     }
     profiler.Write((capture.empty()?"obj/validation/profile":capture)+"-performance.json");
-    activeBoat=nullptr;activeAxolote=nullptr;activeDoors=nullptr;
+    activeBoat=nullptr;activeAxolote=nullptr;activeDoors=nullptr;activeBoundaries=nullptr;
 }
 }
 
