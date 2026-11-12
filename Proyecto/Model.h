@@ -20,7 +20,6 @@
 #include <assimp/postprocess.h>
 #include <assimp/config.h>
 #include "Mesh.h"
-#include "stb_image.h"
 #include "UnicodeIO.h"
 #include "GroundSurface.h"
 #include "SkeletalAnimator.h"
@@ -86,8 +85,12 @@ public:
         if(visibleInstances.empty())return;
         shader.Use();glUniformMatrix4fv(shader.Uniform("viewProjection"),1,GL_FALSE,&viewProjection[0][0]);
         if(!instanceBuffer)glGenBuffers(1,&instanceBuffer);
-        glBindBuffer(GL_ARRAY_BUFFER,instanceBuffer);
-        glBufferData(GL_ARRAY_BUFFER,visibleInstances.size()*sizeof(glm::mat4),visibleInstances.data(),GL_STREAM_DRAW);
+        if(uploadedInstances!=visibleInstances)
+        {
+            glBindBuffer(GL_ARRAY_BUFFER,instanceBuffer);
+            glBufferData(GL_ARRAY_BUFFER,visibleInstances.size()*sizeof(glm::mat4),visibleInstances.data(),GL_STREAM_DRAW);
+            uploadedInstances=visibleInstances;
+        }
         for(const auto& mesh:meshes)
         {
             if(!mesh.HasIdentityTransform())throw std::runtime_error("El lote de farolas requiere mallas en el espacio comun del modelo.");
@@ -148,7 +151,8 @@ public:
         const float blend=sample-static_cast<float>(first);
         for(size_t m=0;m<bakedMeshes.size();++m)
         {
-            auto vertices=bakedMeshes[m].base;
+            auto& vertices=bakedMeshes[m].scratch;
+            if(vertices.empty())vertices=bakedMeshes[m].base;
             const auto& a=bakedMeshes[m].frames[first];const auto& b=bakedMeshes[m].frames[second];
             for(size_t v=0;v<vertices.size();++v)
             {
@@ -192,14 +196,14 @@ private:
 
     std::vector<Mesh> meshes;
     mutable GLuint instanceBuffer=0;
-    mutable std::vector<glm::mat4> visibleInstances;
+    mutable std::vector<glm::mat4> visibleInstances,uploadedInstances;
     std::unordered_map<std::string, GLuint> texturesLoaded;
     std::string directory;
     ModelOptions options;
     std::unordered_map<std::string,std::vector<glm::vec3>> materialProfiles;
     std::unique_ptr<SkeletalAnimator> skeleton;
     struct BakedVertex {glm::vec3 position,normal;};
-    struct BakedMeshFrames {std::vector<Vertex> base;std::vector<std::vector<BakedVertex>> frames;};
+    struct BakedMeshFrames {std::vector<Vertex> base,scratch;std::vector<std::vector<BakedVertex>> frames;};
     std::vector<BakedMeshFrames> bakedMeshes;
     float bakedDuration=0.0f;
     struct Bounds { glm::vec3 min, max; };

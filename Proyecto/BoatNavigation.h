@@ -25,7 +25,6 @@ public:
     bool IsNavigating() const{return navigating;}
     const glm::vec3& Position() const{return position;}
     float Yaw() const{return yaw;}
-    float WaterY() const{return waterY;}
     const Area& Bounds() const{return area;}
     glm::vec3 DockSpot() const
     {return World({area.dockMax.x-1.4f,area.dockMax.y,(area.dockMin.z+area.dockMax.z)*.5f});}

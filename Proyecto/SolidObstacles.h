@@ -2,6 +2,7 @@
 #include <array>
 #include <cmath>
 #include <vector>
+#include <utility>
 #include "Model.h"
 #include "CharacterController.h"
 
@@ -10,6 +11,10 @@ class SolidObstacles
 {
 public:
     struct Box{glm::vec3 min,max;};
+    void SetWalls(std::vector<Box> walls,float worldScale)
+    {
+        boxes=std::move(walls);openings.clear();epsilon=.002f*worldScale;
+    }
     void Build(const Model& scene,const glm::vec3& origin,float scale)
     {
         boxes.clear();epsilon=.002f*scale;

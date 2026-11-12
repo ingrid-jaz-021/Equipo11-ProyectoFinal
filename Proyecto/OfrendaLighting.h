@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <unordered_map>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -89,27 +90,30 @@ public:
         configured = true;
     }
 
-    void Upload(const Shader& shader, float now) const
+    void Upload(const Shader& shader, float now,const FrustumPlanes* planes=nullptr) const
     {
         if (!configured) return;
         shader.Use();
 
         // Cargar las 6 luces puntuales (4 lamparas de cubo + 2 focos suaves de veladoras)
-        glUniform1i(shader.Uniform("ofrendaLightCount"), static_cast<int>(lights.size()));
-        for (size_t i = 0; i < lights.size(); ++i)
+        std::vector<size_t> ids;ids.reserve(lights.size());
+        for(size_t i=0;i<lights.size();++i)if(LightSphereVisible(planes,lights[i].position,lights[i].range))ids.push_back(i);
+        const bool changed=!lastVisible.count(shader.Program)||lastVisible[shader.Program]!=ids;
+        if(changed){lastVisible[shader.Program]=ids;glUniform1i(shader.Uniform("ofrendaLightCount"),static_cast<int>(ids.size()));glUniform4fv(shader.Uniform("ofrendaCandleRegion"),1,&candleRegion[0]);}
+        int visible=0;
+        for (size_t i : ids)
         {
-            const std::string prefix = "ofrendaLights[" + std::to_string(i) + "].";
+            const std::string prefix = "ofrendaLights[" + std::to_string(visible++) + "].";
             const float flicker = 1.0f + 0.05f * std::sin(now * lights[i].flickerFreq + lights[i].flickerPhase)
                                        + 0.03f * std::cos(now * (lights[i].flickerFreq * 1.7f) + lights[i].flickerPhase * 1.3f);
             const glm::vec3 lightColor = lights[i].baseColor * flicker;
 
-            glUniform3fv(glGetUniformLocation(shader.Program, (prefix + "position").c_str()), 1, &lights[i].position[0]);
-            glUniform3fv(glGetUniformLocation(shader.Program, (prefix + "color").c_str()), 1, &lightColor[0]);
-            glUniform1f(glGetUniformLocation(shader.Program, (prefix + "range").c_str()), lights[i].range);
+            if(changed)glUniform3fv(shader.Uniform(prefix + "position"), 1, &lights[i].position[0]);
+            glUniform3fv(shader.Uniform(prefix + "color"), 1, &lightColor[0]);
+            if(changed)glUniform1f(shader.Uniform(prefix + "range"), lights[i].range);
         }
 
         // Region y resplandor ambiental tenue ("muy bajito") de veladoras
-        glUniform4fv(shader.Uniform("ofrendaCandleRegion"), 1, &candleRegion[0]);
 
         const float candleFlicker = 1.0f + 0.07f * std::sin(now * 11.3f) + 0.04f * std::cos(now * 19.7f);
         const glm::vec3 candleColor = glm::vec3(0.16f, 0.09f, 0.03f) * candleFlicker;
@@ -131,6 +135,7 @@ public:
     bool Configured() const { return configured; }
 
 private:
+    mutable std::unordered_map<GLuint,std::vector<size_t>> lastVisible;
     std::vector<Point> lights;
     glm::vec4 candleRegion = glm::vec4(0.0f);
     bool configured = false;

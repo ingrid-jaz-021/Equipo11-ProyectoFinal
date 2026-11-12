@@ -27,7 +27,6 @@ public:
         state=State::Special;clock=0;actionStart=position;actionForward=Forward();return true;
     }
     bool IsSpecial() const{return state==State::Special;}
-    float ActionTime() const{return clock;}
     void PreparePassenger(){state=State::Following;clock=0;CharacterController::PreparePassenger();}
     void UpdateCompanion(const CharacterController& owner,const GroundSurface* ground,const glm::vec3& origin,float scale,float dt,bool animate=true)
     {
