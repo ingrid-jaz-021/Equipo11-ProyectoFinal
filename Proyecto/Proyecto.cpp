@@ -75,7 +75,7 @@ void UpdateWindowTitle(GLFWwindow* window)
 void UpdateFollowCamera(float dt,bool snap=false)
 {
     if(activeBoat&&activeBoat->IsNavigating())
-        followCamera.UpdateAnchor(activeBoat->Position(),activeBoat->Yaw(),player.height,dt,ENVIRONMENT_SCALE,11.5f,snap);
+        followCamera.UpdateAnchor(activeBoat->Position(),player.height,dt,ENVIRONMENT_SCALE,11.5f,snap);
     else followCamera.Update(player,dt,ENVIRONMENT_SCALE,snap);
 }
 void ResetScene()
@@ -136,6 +136,7 @@ void KeyCallback(GLFWwindow* window, int key, int, int action, int)
         player.SetFrozen(cameraMode == CameraMode::Free||(activeBoat&&activeBoat->IsNavigating()));
         if(activeBoat&&cameraMode==CameraMode::Free)activeBoat->Anchor();
         UpdateFollowCamera(0,true);
+        if(cameraMode==CameraMode::ThirdPerson)glfwSetInputMode(window,GLFW_CURSOR,GLFW_CURSOR_DISABLED);
         firstMouse = true;
         UpdateWindowTitle(window);
     }
@@ -202,13 +203,21 @@ void SimulateFrame(glm::vec2 input,bool sprint,float vertical,float dt,const Gro
     // Evaluar cada esqueleto UNA vez por frame, no por cada subpaso fisico.
     if(!activeBoat||!activeBoat->IsNavigating()){player.AnimateFrame(dt);companion.AnimateFrame(dt);}
 }
+template<typename Down>
+glm::vec2 ReadMovementKeys(const Down& down,bool flying,bool sailing)
+{
+    if(flying)return {static_cast<float>(down(GLFW_KEY_D)-down(GLFW_KEY_A)),static_cast<float>(down(GLFW_KEY_W)-down(GLFW_KEY_S))};
+    // Arrows are the sole walking controls. Boat retains WASD and also accepts
+    // arrows; combining both layouts never doubles a component.
+    return {static_cast<float>((down(GLFW_KEY_RIGHT)||(sailing&&down(GLFW_KEY_D)))-(down(GLFW_KEY_LEFT)||(sailing&&down(GLFW_KEY_A)))),
+        static_cast<float>((down(GLFW_KEY_UP)||(sailing&&down(GLFW_KEY_W)))-(down(GLFW_KEY_DOWN)||(sailing&&down(GLFW_KEY_S))))};
+}
 void DoMovement(GLFWwindow* window, float dt,const GroundSurface* ground)
 {
     const auto down = [window](int key) {
         return glfwGetWindowAttrib(window, GLFW_FOCUSED) && glfwGetKey(window, key) == GLFW_PRESS;
     };
-    const glm::vec2 input(static_cast<float>(down(GLFW_KEY_D) - down(GLFW_KEY_A)),
-        static_cast<float>(down(GLFW_KEY_W) - down(GLFW_KEY_S)));
+    const auto input=ReadMovementKeys(down,cameraMode==CameraMode::Free,activeBoat&&activeBoat->IsNavigating());
     SimulateFrame(input, down(GLFW_KEY_LEFT_SHIFT),
         static_cast<float>(down(GLFW_KEY_E) - down(GLFW_KEY_Q)), dt,ground);
 }
@@ -324,6 +333,38 @@ void ValidateControls()
     for(int i=0;i<120;++i) b.Update({1,1},{1,0,0},true,1.0f/60,ENVIRONMENT_SCALE);
     require(glm::length(b.position-position)==0&&glm::length(b.velocity-velocity)==0&&
         b.phase==phase&&b.gait==gait,"El personaje cambia mientras la camara esta libre.");
+    // Real key mapping: WASD is exclusive to free camera / boat, and arrows
+    // translate the girl relative to the current yaw without rotating the view.
+    for(int key:{GLFW_KEY_UP,GLFW_KEY_DOWN,GLFW_KEY_LEFT,GLFW_KEY_RIGHT})
+    {
+        const auto held=[key](int value){return value==key;};
+        const auto input=ReadMovementKeys(held,false,false);
+        require(glm::length(input)==1,"Flecha sin desplazamiento.");
+        require(ReadMovementKeys(held,true,false)==glm::vec2(0),"Las flechas alteran la camara libre.");
+    }
+    const auto wasd=[](int key){return key==GLFW_KEY_W;};
+    require(ReadMovementKeys(wasd,false,false)==glm::vec2(0)&&ReadMovementKeys(wasd,true,false)==glm::vec2(0,1),"WASD no respeta el modo de camara.");
+    for(int angle=0;angle<4;++angle)for(glm::vec2 input:{glm::vec2(0,1),{0,-1},{-1,0},{1,0}})
+    {
+        FollowCamera camera;CharacterController test;
+        camera.yaw=angle*1.57079632679f;const auto forward=camera.Forward();
+        const auto expected=forward*input.y+glm::cross(forward,glm::vec3(0,1,0))*input.x;
+        for(int i=0;i<120;++i){test.Update(input,forward,false,1.0f/60,ENVIRONMENT_SCALE);camera.Update(test,1.0f/60,ENVIRONMENT_SCALE);}
+        require(glm::dot(glm::normalize(test.position),expected)>.9999f,"Flechas fuera de la base de la camara.");
+        require(glm::dot(test.Forward(),forward)>.9999f,"El cuerpo no mira hacia el yaw de la camara al hacer strafe/retroceder.");
+        require(std::abs(std::remainder(camera.yaw-angle*1.57079632679f,6.28318530718f))<.00001f,"El teclado rota la camara.");
+    }
+    CharacterController heldTurn;
+    for(int i=0;i<60;++i)heldTurn.Update({0,1},{0,0,1},false,1.0f/60,ENVIRONMENT_SCALE);
+    for(int i=0;i<60;++i)heldTurn.Update({0,1},{1,0,0},false,1.0f/60,ENVIRONMENT_SCALE);
+    require(heldTurn.position.x>ENVIRONMENT_SCALE&&heldTurn.velocity.x>10&&std::abs(heldTurn.velocity.z)<.01f,"La direccion queda bloqueada al mantener la flecha y mover el mouse.");
+    FollowCamera orbit;CharacterController standing;const auto still=standing.position;
+    orbit.Mouse(1200,0); // full 180-degree turn without any movement key
+    for(int i=0;i<120;++i)standing.Update({0,0},orbit.Forward(),false,1.0f/60,ENVIRONMENT_SCALE);
+    require(standing.position==still&&glm::dot(standing.Forward(),orbit.Forward())>.9999f,"La nina no gira entera al mover el mouse estando quieta.");
+    orbit.Mouse(0,10000);orbit.Update(standing,0,ENVIRONMENT_SCALE,true);
+    require(orbit.pitch==-10&&orbit.position.y>=standing.position.y+standing.height*.18f,"La camara atraviesa el suelo al mirar arriba.");
+    orbit.Mouse(0,-10000);require(orbit.pitch==72,"Pitch sin limite superior.");
     const glm::vec2 tile=ZocaloTileSize("Material.006");
     const auto u=ProjectFloorUV({0,0,0},{0,1,0},tile);
     const auto v=ProjectFloorUV({tile.x,0,0},{0,1,0},tile);
@@ -334,7 +375,24 @@ void ValidateControls()
         !BoundsVisible(frustum,{2,-.5f,-.5f},{3,.5f,.5f})&&
         !TransformedBoundsVisible(frustum,glm::vec3(-.5f),glm::vec3(.5f),glm::translate(glm::mat4(1),glm::vec3(5,0,0))),
         "El frustum descarta objetos visibles o conserva objetos fuera del campo.");
-    std::cout<<"Controles OK: FPS, diagonales, bloqueo del personaje y escala UV."<<std::endl;
+    std::cout<<"Controles OK: flechas en 4 orientaciones, strafe, cuerpo/camara independientes del teclado, giro al mantener tecla, FPS y suelo."<<std::endl;
+}
+void ValidateMouseOrbit(GLFWwindow* window)
+{
+    const int previousCursor=glfwGetInputMode(window,GLFW_CURSOR);
+    ResetScene();glfwSetInputMode(window,GLFW_CURSOR,GLFW_CURSOR_DISABLED);
+    firstMouse=true;MouseCallback(window,100,100);MouseCallback(window,700,130);
+    const auto heading=followCamera.Forward(),start=player.position;
+    if(std::abs(followCamera.yaw+1.57079632679f)>.0001f)throw std::runtime_error("El callback de mouse no permite una orbita de 90 grados.");
+    for(int i=0;i<120;++i)SimulateFrame({0,0},false,0,1.0f/60,nullptr);
+    if(player.position!=start||glm::dot(player.Forward(),heading)<.9999f)
+        throw std::runtime_error("El mouse no orienta el cuerpo completo en reposo.");
+    KeyCallback(window,GLFW_KEY_C,0,GLFW_PRESS,0);
+    glfwSetInputMode(window,GLFW_CURSOR,GLFW_CURSOR_NORMAL);
+    KeyCallback(window,GLFW_KEY_C,0,GLFW_PRESS,0);
+    if(glfwGetInputMode(window,GLFW_CURSOR)!=GLFW_CURSOR_DISABLED)throw std::runtime_error("C no recaptura el cursor al volver a tercera persona.");
+    ResetScene();glfwSetInputMode(window,GLFW_CURSOR,previousCursor);firstMouse=true;
+    std::cout<<"Mouse/touchpad OK: callback real, yaw 360 independiente, cuerpo completo y captura al regresar con C."<<std::endl;
 }
 void ValidateFrozenCharacter(GLFWwindow* window)
 {
@@ -403,6 +461,28 @@ void ValidateArticulation(SkeletalAnimator& rig)
     std::cout<<"Brazos OK: 4500 poses/mezclas limitadas; codos y manos por debajo de sus hombros."<<std::endl;
 }
 
+void ValidateStableIdle(SkeletalAnimator& rig)
+{
+    rig.Reset();const auto neutral=rig.Palette();
+    for(int fps:{30,60,144})
+    {
+        rig.Reset();
+        for(int i=0;i<fps*6;++i)
+        {
+            rig.Update(1.0f/fps,i*.13f,0,0);
+            if(std::memcmp(neutral.data(),rig.Palette().data(),neutral.size()*sizeof(glm::mat4)))
+                throw std::runtime_error("El Idle neutro contiene sacudidas o desplazamiento de huesos.");
+        }
+        CharacterController stopping;stopping.Attach(&rig);
+        for(int i=0;i<fps;++i)stopping.Update({0,1},{0,0,1},true,1.0f/fps,ENVIRONMENT_SCALE);
+        for(int i=0;i<fps*3;++i)stopping.Update({0,0},{0,0,1},false,1.0f/fps,ENVIRONMENT_SCALE);
+        if(stopping.gait!=0||stopping.velocity!=glm::vec3(0)||
+            std::memcmp(neutral.data(),rig.Palette().data(),neutral.size()*sizeof(glm::mat4)))
+            throw std::runtime_error("La transicion caminar/correr a Idle no se estabiliza.");
+    }
+    rig.Reset();
+    std::cout<<"Idle nina OK: pose neutra sin jitter durante 6 s, parada suave y estable a 30/60/144 FPS."<<std::endl;
+}
 void ValidateCompanion(Model& dog)
 {
     auto* rig=dog.Animator();
@@ -642,10 +722,11 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     // El modelo y los materiales con ñ se leen como UTF-8, incluso con Assimp antiguo.
     glfwSetWindowTitle(window, "Cargando personaje...");
     Model girl("Models/NinaRig/NinaRig.fbx", keepLoading, { nullptr, true });
+    girl.Animator()->UseStableIdle();
     player.Attach(girl.Animator());
     player.Configure(girl.GetMinBounds(), girl.GetMaxBounds(), MovementSettings::CharacterHeight * ENVIRONMENT_SCALE);
     ResetScene();
-    if (validate) { ValidateArticulation(*girl.Animator()); ValidateFrozenCharacter(window); ValidateRaisedGround(); ValidateRamps(); }
+    if (validate) { ValidateArticulation(*girl.Animator()); ValidateStableIdle(*girl.Animator()); ValidateFrozenCharacter(window); ValidateMouseOrbit(window); ValidateRaisedGround(); ValidateRamps(); }
     glfwSetWindowTitle(window,"Cargando xoloitzcuintle...");
     Model dog("Models/XoloRig/XoloRig.fbx",keepLoading,{nullptr,true});
     if(validate)ValidateCompanion(dog);
@@ -693,6 +774,11 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     WorldBoundaries boundaries;
     AmbientAudio ambientAudio(validate);
     Fireworks fireworks;
+    if(validate&&characterOnly)
+    {
+        fireworks.Configure({0,0,0},{400,0,360},{0,0,0},ENVIRONMENT_SCALE);
+        fireworks.Validate();
+    }
     std::unique_ptr<Model> environment;
     if (!characterOnly)
     {
@@ -809,14 +895,14 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     const float sceneDiagonal = environment
         ? glm::length(environment->GetMaxBounds() - environment->GetMinBounds()) * ENVIRONMENT_SCALE : 1000.0f;
     std::cout << "\n================ CONTROLES ================\n"
-        << "A PIE        WASD: mover a la nina | Shift izquierdo: correr\n"
+        << "A PIE        Flechas: avanzar/retroceder/strafe segun camara | Shift: correr\n"
         << "CAMARAS      C: alternar tercera persona / libre\n"
-        << "             Raton: mirar u orbitar | Rueda: zoom / campo de vision\n"
+        << "             Raton/touchpad: orbita 360 y orienta TODO el cuerpo | Rueda: zoom\n"
         << "CAMARA LIBRE WASD: volar | E: subir | Q: bajar | Shift izquierdo: acelerar\n"
         << "             La nina y los pasajeros permanecen inmoviles.\n"
         << "XOLO         F: olfatear, girar y avanzar; retoma el seguimiento (fuera del bote)\n"
         << "BOTE         E: embarcar cerca; desembarcar junto a muelle u orilla\n"
-        << "             A bordo: W/S avanzar/retroceder | A/D timon | Shift: acelerar\n"
+        << "             A bordo: W/S o Arriba/Abajo | A/D o Izquierda/Derecha: timon | Shift: acelerar\n"
         << "DIALOGOS     G: hablar con el ajolote, avanzar mensajes y cerrar\n"
         << "             Ivanovich y la ofrenda: informacion automatica al acercarse\n"
         << "GENERAL      R: reiniciar escena o camara libre | Tab: liberar/capturar cursor\n"
@@ -1280,6 +1366,7 @@ int main(int argc, char** argv)
     while (glGetError() != GL_NO_ERROR) {}
     glfwSetKeyCallback(window, KeyCallback);
     glfwSetCursorPosCallback(window, MouseCallback);
+    glfwSetWindowFocusCallback(window,[](GLFWwindow*,int){firstMouse=true;});
     glfwSetScrollCallback(window, [](GLFWwindow*, double, double y) {
         if (cameraMode == CameraMode::Free) freeCamera.ProcessMouseScroll(static_cast<float>(y));
         else followCamera.Scroll(static_cast<float>(y));
