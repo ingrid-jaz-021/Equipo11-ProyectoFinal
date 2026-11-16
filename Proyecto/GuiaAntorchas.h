@@ -77,6 +77,7 @@ public:
         targetHeading = 180.0f;
         lateralOpenFactor = 0.0f;
         walkPhase = 0.0f;
+        legAmount = 0.0f;
         idlePhase = 0.0f;
         isWalking = false;
         previousStateBeforeWaiting = State::GuidingMainCorridor;
@@ -102,6 +103,7 @@ public:
                                      (playerWorld.x >= mainCorridorX - 5.0f) && (playerWorld.x <= lakeX + 6.0f);
         const bool onCarpet = onMainCorridor || onRightCorridor;
 
+        const glm::vec2 previousPath(currentX,currentZ);
         isWalking = false;
         float currentSpeed = 0.0f;
 
@@ -379,12 +381,14 @@ public:
                 mujerPos.y = yM;
         }
 
+        // Gait follows actual route distance, so waiting does not slide the feet.
+        const float travelled=glm::length(glm::vec2(currentX,currentZ)-previousPath);
+        const float gaitTarget=travelled>0.00001f?glm::clamp(currentSpeed/3.5f,.35f,1.0f):0.0f;
+        legAmount=glm::mix(legAmount,gaitTarget,1-std::exp(-9*dt));
+        walkPhase=std::fmod(walkPhase+travelled*6.2831853f/3.5f,6.2831853f);
         // === MODELADO JERARQUICO ARTICULADO (Cinematica Directa) ===
         if (isWalking)
         {
-            constexpr float walkFrequency = 2.0f; // 2 pasos por segundo
-            walkPhase += walkFrequency * 6.2831853f * dt;
-            if (walkPhase > 628.31853f) walkPhase -= 628.31853f;
 
             // Torso: leve rebote vertical y balanceo lateral (roll)
             torsoBobY = 0.12f * std::abs(std::sin(walkPhase));
@@ -527,7 +531,7 @@ public:
     using TorchFrame = std::array<TorchPointLight,2>;
 
     // Build once AFTER Update; reuse this same frame for static, skinned and
-    // instanced geometry. The socket is the measured center of each flame mesh.
+    // instanced geometry. The socket is measured at 85% of the visible flame height, not the cup/staff.
     TorchFrame TorchLightsAt(double now) const
     {
         TorchFrame lights;
@@ -619,11 +623,54 @@ public:
     }
 
     bool Configured() const { return configured; }
+    std::vector<glm::mat4> LegPose(GuiaLegRig::Body body) const
+    {return GuiaLegRig{body}.Palette(walkPhase+(body==GuiaLegRig::Body::Mujer?.42f:0),legAmount);}
+    void ValidateGait() const
+    {
+        for(auto body:{GuiaLegRig::Body::Hombre,GuiaLegRig::Body::Mujer})
+        {
+            const GuiaLegRig rig{body};
+            for(int frame=0;frame<120;++frame)
+            {
+                const float phase=frame*6.2831853f/120;
+                const auto bones=rig.Palette(phase,1);
+                for(int side=0;side<2;++side)
+                {
+                    const auto hip=rig.Hip(side),knee=rig.Knee(side);
+                    const auto upper=bones[1+side*2],lower=bones[2+side*2];
+                    if(glm::distance(glm::vec3(upper*glm::vec4(knee,1)),glm::vec3(lower*glm::vec4(knee,1)))>.0001f)
+                        throw std::runtime_error("Guia: rodilla separada del muslo.");
+                    const auto angles=glm::degrees(rig.Angles(phase+side*3.14159265f,1));
+                    if(std::abs(angles.x)>25.01f||angles.y<0||angles.y>53.01f)
+                        throw std::runtime_error("Guia: limite anatomico de pierna excedido.");
+                    const auto w=rig.Weights(hip+glm::vec3(0,2,0));
+                    if(w.weights.x<.999f)throw std::runtime_error("Las piernas modifican el torso/brazos.");
+                    const auto footWeights=rig.Weights(knee-glm::vec3(0,2,0));
+                    if(footWeights.weights.z<.99f)throw std::runtime_error("La pantorrilla no flexiona con la rodilla.");
+                }
+            }
+        }
+        auto a=*this,b=*this;const auto target=(glm::vec3(mainCorridorX,floorY,235)-origin)*scale;
+        a.Update(.001f,target,nullptr);b.Update(.001f,target,nullptr);
+        for(int i=0;i<60;++i)a.Update(1.0f/60,target,nullptr);
+        for(int i=0;i<120;++i)b.Update(1.0f/120,target,nullptr);
+        if(std::abs(a.walkPhase-b.walkPhase)>.05f)throw std::runtime_error("Cadencia de guias dependiente de FPS.");
+        std::cout<<"Piernas OK: skinning de cadera/rodilla, ciclo alternado por distancia, torso y brazos intactos."<<std::endl;
+    }
 
     // Validation uses real model bounds and rendered attachment matrices. In particular
     // it catches an importer-axis error or swapped shoulders even if OBJ loading succeeds.
     void ValidateAnatomy(const Model& hombreArm, const Model& mujerArm) const
     {
+        const Model* carryingArms[]={&hombreArm,&mujerArm};
+        const glm::vec3 sockets[]={GuiaArmPose::HombreTorch,GuiaArmPose::MujerTorch};
+        for(int i=0;i<2;++i)
+        {
+            const auto lo=carryingArms[i]->GetMinBounds(),hi=carryingArms[i]->GetMaxBounds();
+            const auto socket=sockets[i];
+            if(hi.y-socket.y<0||hi.y-socket.y>.45f||socket.x<lo.x||socket.x>hi.x||socket.z<lo.z||socket.z>hi.z)
+                throw std::runtime_error("La luz no coincide con la parte alta de la llama de su antorcha.");
+        }
         for (const Model* arm : { &hombreArm, &mujerArm })
         {
             const auto lo = arm->GetMinBounds(), hi = arm->GetMaxBounds();
@@ -693,6 +740,7 @@ private:
     float rightArmSwing = 0.0f;
     float torchBobPitch = 0.0f;
 
+    float legAmount=0.0f;
     float walkPhase = 0.0f;
     float idlePhase = 0.0f;
     bool isWalking = false;

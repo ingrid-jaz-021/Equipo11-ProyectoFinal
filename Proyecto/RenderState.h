@@ -8,9 +8,15 @@ namespace RenderState
     inline GLuint program=~0u,texture=~0u,vao=~0u;
     inline bool textureUnitKnown=false;
     inline const void* material=nullptr;
+    inline bool validateMaterials=false;
     inline void Invalidate(){program=texture=vao=~0u;textureUnitKnown=false;material=nullptr;}
     inline void UseProgram(GLuint value)
     {if(program!=value){glUseProgram(value);program=value;material=nullptr;}}
+    inline void BeginMaterials()
+    {
+        glActiveTexture(GL_TEXTURE0);textureUnitKnown=true;
+        texture=~0u;material=nullptr;
+    }
     inline void BindTexture2D(GLuint value)
     {
         if(!textureUnitKnown){glActiveTexture(GL_TEXTURE0);textureUnitKnown=true;}

@@ -27,6 +27,7 @@
 #include "FloorUV.h"
 #include "MovementSettings.h"
 #include "DockSurface.h"
+#include "GuiaLegRig.h"
 
 struct ModelOptions
 {
@@ -34,6 +35,7 @@ struct ModelOptions
     bool skeletal = false;
     std::vector<std::string> boundaryProfileMaterials;
     bool requireLocomotion=true;
+    GuiaLegRig::Body guideLegs=GuiaLegRig::Body::None;
 };
 
 class Model
@@ -57,6 +59,10 @@ public:
 
     void Draw(const Shader& shader,const glm::mat4& clipFromModel,bool cull,const glm::mat4& baseModel) const
     {
+        shader.Use();
+        // Every model owns its material handoff, including after water/UI/particles.
+        RenderState::BeginMaterials();
+        glUniform1i(shader.Uniform("texture_diffuse1"),0);
         const auto basePlanes=ExtractFrustum(clipFromModel);
         if(cull&&!BoundsVisible(basePlanes,minBounds,maxBounds)){++RenderMetrics::culled;return;}
         const auto baseNormal=glm::transpose(glm::inverse(glm::mat3(baseModel)));
@@ -415,6 +421,8 @@ private:
             materialName = name.C_Str();
         }
         if (options.skeletal) skin = skeleton->Weights(mesh);
+        const GuiaLegRig guideRig{options.guideLegs};
+        if(options.guideLegs!=GuiaLegRig::Body::None)skin.reserve(mesh->mNumVertices);
         glm::vec3 meshMin((std::numeric_limits<float>::max)());
         glm::vec3 meshMax((std::numeric_limits<float>::lowest)());
         vertices.reserve(mesh->mNumVertices);
@@ -423,6 +431,7 @@ private:
         {
             Vertex vertex{};
             vertex.Position = glm::vec3(mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z);
+            if(options.guideLegs!=GuiaLegRig::Body::None)skin.push_back(guideRig.Weights(vertex.Position));
             if(options.ground&&materialName=="tarima_madera.001")vertex.Position=DockSurface::AlignVertex(vertex.Position);
             vertex.Normal = mesh->HasNormals()
                 ? glm::vec3(mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z)
