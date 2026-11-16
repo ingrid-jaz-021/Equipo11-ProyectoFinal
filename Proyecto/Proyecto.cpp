@@ -221,6 +221,26 @@ void DoMovement(GLFWwindow* window, float dt,const GroundSurface* ground)
     SimulateFrame(input, down(GLFW_KEY_LEFT_SHIFT),
         static_cast<float>(down(GLFW_KEY_E) - down(GLFW_KEY_Q)), dt,ground);
 }
+void PrintControls()
+{
+    // Audited against KeyCallback, ReadMovementKeys, DoMovement and mouse/scroll callbacks.
+    std::cout << "\n================ CONTROLES ACTIVOS ================\n"
+        << "A PIE     Flechas: avanzar, retroceder y desplazarse a los lados segun la vista.\n"
+        << "          Shift izquierdo: correr.\n"
+        << "VISTA     Raton/touchpad capturado: orbitar en tercera persona; mirar en libre.\n"
+        << "          Rueda: distancia en tercera persona; campo de vision en libre.\n"
+        << "CAMARAS   C: alternar tercera persona / camara libre.\n"
+        << "LIBRE     W/A/S/D: volar. E/Q: subir/bajar. Shift izquierdo: acelerar.\n"
+        << "BOTE      E: embarcar cerca del bote; desembarcar cerca de muelle u orilla.\n"
+        << "          Arriba/Abajo o W/S: avanzar/retroceder. Izquierda/Derecha o A/D: timon.\n"
+        << "          Shift izquierdo: acelerar.\n"
+        << "XOLO      F: olfatear, girar y avanzar (fuera del bote).\n"
+        << "DIALOGO   G: iniciar, avanzar y cerrar el dialogo del ajolote (a pie, cerca).\n"
+        << "GENERAL   Tab: liberar/capturar cursor. V: activar/desactivar V-Sync.\n"
+        << "          R: reiniciar nina, mascota y bote en tercera persona; recolocar camara en libre.\n"
+        << "          Esc: salir.\n"
+        << "==================================================\n" << std::flush;
+}
 void CheckOpenGL(const char* stage)
 {
     const GLenum error = glGetError();
@@ -411,6 +431,30 @@ void ValidateFrozenCharacter(GLFWwindow* window)
     ResetScene();
     std::cout<<"Pausa real de huesos OK: C congela pose y posicion; WASD mueve solo la camara."<<std::endl;
 }
+void ValidateActiveControls(GLFWwindow* window)
+{
+    const int cursor=glfwGetInputMode(window,GLFW_CURSOR);const bool sync=vsyncEnabled;
+    KeyCallback(window,GLFW_KEY_TAB,0,GLFW_PRESS,0);
+    if(glfwGetInputMode(window,GLFW_CURSOR)==cursor)throw std::runtime_error("Tab anunciado pero no cambia el cursor.");
+    KeyCallback(window,GLFW_KEY_TAB,0,GLFW_PRESS,0);
+    KeyCallback(window,GLFW_KEY_V,0,GLFW_PRESS,0);
+    if(vsyncEnabled==sync)throw std::runtime_error("V anunciado pero no cambia V-Sync.");
+    KeyCallback(window,GLFW_KEY_V,0,GLFW_PRESS,0);
+    cameraMode=CameraMode::Free;player.SetFrozen(true);
+    freeCamera=Camera(glm::vec3(900,800,700));KeyCallback(window,GLFW_KEY_R,0,GLFW_PRESS,0);
+    if(glm::distance(freeCamera.GetPosition(),glm::vec3(30,30,-60))>.0001f)
+        throw std::runtime_error("R no recoloca la camara libre.");
+    const auto eye=freeCamera.GetPosition();ApplyMovement({0,0},false,1,.25f);
+    if(freeCamera.GetPosition().y<=eye.y)throw std::runtime_error("E no asciende en camara libre.");
+    ApplyMovement({0,0},false,-1,.25f);
+    if(glm::distance(freeCamera.GetPosition(),eye)>.0001f)throw std::runtime_error("Q no desciende en camara libre.");
+    cameraMode=CameraMode::ThirdPerson;player.position=glm::vec3(50);KeyCallback(window,GLFW_KEY_R,0,GLFW_PRESS,0);
+    if(player.position!=glm::vec3(0)||player.IsFrozen())throw std::runtime_error("R no reinicia a la nina en tercera persona.");
+    KeyCallback(window,GLFW_KEY_ESCAPE,0,GLFW_PRESS,0);
+    if(!glfwWindowShouldClose(window))throw std::runtime_error("Esc anunciado pero no cierra la ventana.");
+    glfwSetWindowShouldClose(window,GLFW_FALSE);glfwSetInputMode(window,GLFW_CURSOR,cursor);ResetScene();
+    std::cout<<"Menu auditado OK: flechas/WASD, mouse/rueda, C, E/Q, F, G, Shift izquierdo, R, Tab, V y Esc; acciones por contexto."<<std::endl;
+}
 void ValidateArticulation(SkeletalAnimator& rig)
 {
     if(!rig.HasArmSafety())throw std::runtime_error("Los brazos no tienen proteccion anatomica activa.");
@@ -464,6 +508,25 @@ void ValidateArticulation(SkeletalAnimator& rig)
 void ValidateStableIdle(SkeletalAnimator& rig)
 {
     rig.Reset();const auto neutral=rig.Palette();
+    const auto checkUpright=[&]()
+    {
+        const auto center=rig.JointPosition("Hips");
+        for(const char* joint:{"Root","Hips","Spine","Chest","Neck","Head"})
+        {
+            const auto m=rig.JointMatrix(joint);const auto up=glm::normalize(glm::vec3(m[1]));
+            if(up.x!=0.0f||up.z!=0.0f||std::abs(up.y-1)>.00001f)
+                throw std::runtime_error(std::string("Pitch/Roll residual en Idle: ")+joint);
+            if(std::string(joint)!="Root"&&(std::abs(m[3].x-center.x)>.00001f||std::abs(m[3].z-center.z)>.00001f))
+                throw std::runtime_error("La columna no esta alineada sobre la cadera.");
+        }
+        for(const char* joint:{"UpperArm","Forearm","Hand","Thigh","Shin","Foot"})
+        {
+            const auto a=rig.JointPosition(std::string(joint)+".L"),b=rig.JointPosition(std::string(joint)+".R");
+            if(std::abs(a.x+b.x-2*center.x)>.00001f||std::abs(a.y-b.y)>.00001f||std::abs(a.z-b.z)>.00001f)
+                throw std::runtime_error(std::string("Idle asimetrico: ")+joint);
+        }
+    };
+    checkUpright();
     for(int fps:{30,60,144})
     {
         rig.Reset();
@@ -479,9 +542,12 @@ void ValidateStableIdle(SkeletalAnimator& rig)
         if(stopping.gait!=0||stopping.velocity!=glm::vec3(0)||
             std::memcmp(neutral.data(),rig.Palette().data(),neutral.size()*sizeof(glm::mat4)))
             throw std::runtime_error("La transicion caminar/correr a Idle no se estabiliza.");
+        checkUpright();
+        const auto modelUp=glm::normalize(glm::vec3(stopping.ModelMatrix()[1]));
+        if(modelUp!=glm::vec3(0,1,0))throw std::runtime_error("La matriz base inclina al personaje en Idle.");
     }
     rig.Reset();
-    std::cout<<"Idle nina OK: pose neutra sin jitter durante 6 s, parada suave y estable a 30/60/144 FPS."<<std::endl;
+    std::cout<<"Idle nina OK: Pitch/Roll 0, columna vertical, extremidades simetricas, sin jitter y parada estable a 30/60/144 FPS."<<std::endl;
 }
 void ValidateCompanion(Model& dog)
 {
@@ -726,7 +792,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     player.Attach(girl.Animator());
     player.Configure(girl.GetMinBounds(), girl.GetMaxBounds(), MovementSettings::CharacterHeight * ENVIRONMENT_SCALE);
     ResetScene();
-    if (validate) { ValidateArticulation(*girl.Animator()); ValidateStableIdle(*girl.Animator()); ValidateFrozenCharacter(window); ValidateMouseOrbit(window); ValidateRaisedGround(); ValidateRamps(); }
+    if (validate) { ValidateArticulation(*girl.Animator()); ValidateStableIdle(*girl.Animator()); ValidateFrozenCharacter(window); ValidateMouseOrbit(window); ValidateActiveControls(window); ValidateRaisedGround(); ValidateRamps(); }
     glfwSetWindowTitle(window,"Cargando xoloitzcuintle...");
     Model dog("Models/XoloRig/XoloRig.fbx",keepLoading,{nullptr,true});
     if(validate)ValidateCompanion(dog);
@@ -894,20 +960,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     CheckOpenGL("carga de modelos, rig y cubemap");
     const float sceneDiagonal = environment
         ? glm::length(environment->GetMaxBounds() - environment->GetMinBounds()) * ENVIRONMENT_SCALE : 1000.0f;
-    std::cout << "\n================ CONTROLES ================\n"
-        << "A PIE        Flechas: avanzar/retroceder/strafe segun camara | Shift: correr\n"
-        << "CAMARAS      C: alternar tercera persona / libre\n"
-        << "             Raton/touchpad: orbita 360 y orienta TODO el cuerpo | Rueda: zoom\n"
-        << "CAMARA LIBRE WASD: volar | E: subir | Q: bajar | Shift izquierdo: acelerar\n"
-        << "             La nina y los pasajeros permanecen inmoviles.\n"
-        << "XOLO         F: olfatear, girar y avanzar; retoma el seguimiento (fuera del bote)\n"
-        << "BOTE         E: embarcar cerca; desembarcar junto a muelle u orilla\n"
-        << "             A bordo: W/S o Arriba/Abajo | A/D o Izquierda/Derecha: timon | Shift: acelerar\n"
-        << "DIALOGOS     G: hablar con el ajolote, avanzar mensajes y cerrar\n"
-        << "             Ivanovich y la ofrenda: informacion automatica al acercarse\n"
-        << "GENERAL      R: reiniciar escena o camara libre | Tab: liberar/capturar cursor\n"
-        << "             V: alternar V-Sync | Esc: salir\n"
-        << "==========================================\n" << std::flush;
+    PrintControls();
 
     double previous = glfwGetTime();
     FrameProfiler profiler(profiling);

@@ -50,6 +50,7 @@ public:
         const float targetYaw=std::atan2(movementForward.x,movementForward.z);
         yaw=std::remainder(yaw+std::remainder(targetYaw-yaw,6.28318530718f)*
             (1-std::exp(-12.0f*dt)),6.28318530718f);
+        if(std::abs(std::remainder(targetYaw-yaw,6.28318530718f))<.0001f)yaw=targetYaw;
         glm::vec3 desired(0.0f);
         if (moving)
         {
@@ -111,6 +112,7 @@ public:
     }
     glm::mat4 ModelMatrix() const
     {
+        // World orientation is yaw-only: no residual pitch/roll at rest or on slopes.
         glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
         model = glm::rotate(model, yaw, glm::vec3(0, 1, 0));
         model = glm::scale(model, glm::vec3(modelScale));

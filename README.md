@@ -26,14 +26,14 @@ Set-Location Proyecto
 | --- | --- |
 | Mover a la niña | Flechas según la orientación de la cámara; Shift izquierdo para correr |
 | Cambiar cámara | C |
-| Mirar / ajustar vista | Ratón o touchpad: órbita libre de 360° y orientación del cuerpo completo; rueda: zoom |
-| Cámara libre | WASD; E subir, Q bajar; Shift acelerar |
-| Acción del xolo | F |
+| Mirar / ajustar vista | Ratón o touchpad con cursor capturado: órbita en tercera persona y vista en libre; rueda: distancia o campo de visión, respectivamente |
+| Cámara libre | WASD; E subir, Q bajar; Shift izquierdo para acelerar |
+| Acción del xolo | F, fuera del bote |
 | Subir o bajar del bote | E cerca del bote, muelle u orilla |
-| Navegar | W/S o Arriba/Abajo para avanzar o retroceder; A/D o Izquierda/Derecha para girar; Shift acelerar |
-| Diálogo del ajolote | G para iniciar, avanzar y cerrar |
-| Información de Ivanovich y la ofrenda | Aparece por proximidad |
-| Reiniciar / liberar cursor / V-Sync / salir | R / Tab / V / Esc |
+| Navegar | W/S o Arriba/Abajo para avanzar o retroceder; A/D o Izquierda/Derecha para girar; Shift izquierdo para acelerar |
+| Diálogo del ajolote | G para iniciar, avanzar y cerrar; a pie, cerca del ajolote |
+| Reiniciar | R: niña, mascota y bote en tercera persona; posición de la cámara en libre |
+| Liberar o capturar cursor / V-Sync / salir | Tab / V / Esc |
 
 ## Recursos y créditos
 
