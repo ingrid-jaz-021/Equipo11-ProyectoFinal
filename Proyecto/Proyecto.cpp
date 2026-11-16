@@ -43,6 +43,8 @@
 #include "SolidObstacles.h"
 #include "MoonSky.h"
 #include "WorldBoundaries.h"
+#include "AmbientAudio.h"
+#include "Fireworks.h"
 
 namespace
 {
@@ -599,7 +601,7 @@ void SetValidationCamera(const glm::vec3& eye, const glm::vec3& target)
     cameraMode = CameraMode::Free;
 }
 void DrawObject(const Model& object, const Shader& shader, const glm::mat4& model,
-    const glm::mat4& view, const glm::mat4& projection, const CharacterController* actor=nullptr)
+    const glm::mat4& view, const glm::mat4& projection, const CharacterController* actor=nullptr, const std::vector<glm::mat4>* articulatedPose=nullptr)
 {
     if(actor)
     {
@@ -610,13 +612,13 @@ void DrawObject(const Model& object, const Shader& shader, const glm::mat4& mode
     shader.Use();
     glUniformMatrix4fv(shader.Uniform("view"), 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(shader.Uniform("projection"), 1, GL_FALSE, glm::value_ptr(projection));
-    if (actor)
+    if (actor || articulatedPose)
     {
-        const auto& bones = actor->Pose();
+        const auto& bones = articulatedPose ? *articulatedPose : actor->Pose();
         glUniformMatrix4fv(shader.Uniform("bones[0]"), static_cast<GLsizei>(bones.size()),
             GL_FALSE, glm::value_ptr(bones[0]));
     }
-    object.Draw(shader, projection * view * model, actor==nullptr,model);
+    object.Draw(shader, projection * view * model, actor==nullptr&&!articulatedPose,model);
 }
 void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::string& capture,bool profiling=false)
 {
@@ -689,6 +691,8 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     }
     GroundSurface ground;
     WorldBoundaries boundaries;
+    AmbientAudio ambientAudio(validate);
+    Fireworks fireworks;
     std::unique_ptr<Model> environment;
     if (!characterOnly)
     {
@@ -699,15 +703,16 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         lagunaDancer.Configure(*environment, *lagunaDancerModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
         lagunaAlmas.Configure(*environment, almaModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
         glfwSetWindowTitle(window, "Cargando guias con antorcha...");
-        hombreCuerpoModel = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA_Cuerpo.obj", keepLoading);
+        hombreCuerpoModel = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA_Cuerpo.obj", keepLoading, ModelOptions{nullptr,false,{},true,GuiaLegRig::Body::Hombre});
         hombreBrazoDerModel = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA_BrazoDer_Flex.obj", keepLoading);
         hombreBrazoIzqModel = std::make_unique<Model>("Models/GuiaAntorcha/HombreGA_BrazoIzq_Flex.obj", keepLoading);
-        mujerCuerpoModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA_Cuerpo.obj", keepLoading);
+        mujerCuerpoModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA_Cuerpo.obj", keepLoading, ModelOptions{nullptr,false,{},true,GuiaLegRig::Body::Mujer});
         mujerBrazoDerModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA_BrazoDer_Flex.obj", keepLoading);
         mujerBrazoIzqModel = std::make_unique<Model>("Models/GuiaAntorcha/MujerGA_BrazoIzq_Flex.obj", keepLoading);
         guiaAntorchas.Configure(*hombreCuerpoModel, *mujerCuerpoModel, SOURCE_SPAWN, ENVIRONMENT_SCALE);
         if (validate)
         {
+            guiaAntorchas.ValidateGait();
             guiaAntorchas.ValidateAnatomy(*hombreBrazoIzqModel,*mujerBrazoIzqModel);
             guiaAntorchas.ValidateTorchLighting(environmentShader,characterShader,lampShader);
         }
@@ -784,6 +789,9 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         boundaries.Build(*environment,ground,SOURCE_SPAWN,ENVIRONMENT_SCALE,water->SourceMin(),water->SourceMax());
         if(validate)boundaries.Validate(ground);
         activeBoundaries=&boundaries;
+        ambientAudio.Configure(*environment,SOURCE_SPAWN,ENVIRONMENT_SCALE,water->SourceMin(),water->SourceMax());
+        fireworks.Configure(water->SourceMin(),water->SourceMax(),SOURCE_SPAWN,ENVIRONMENT_SCALE);
+        if(validate){ambientAudio.Validate();fireworks.Validate();lagunaDancer.ValidateLighting(environmentShader);}
     }
     Skybox skybox;
     UpdateWindowTitle(window);
@@ -831,6 +839,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         glfwPollEvents();
         if (validate)
         {
+            if(environment&&frame==400)player.position=navigation->DockSpot();
             if (environment && frame == 145)
                 player.position = (glm::vec3(-114.75f,1.776f,239.0f)-SOURCE_SPAWN)*ENVIRONMENT_SCALE;
             glm::vec2 input = frame > 0 && frame < 70 ? glm::vec2(0, 1) : glm::vec2(0);
@@ -888,6 +897,10 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         else DoMovement(window,dt,environment?&ground:nullptr);
         if (lagunaDancerModel) lagunaDancer.Update(dt);
         lagunaAlmas.Update(dt);
+        const bool atLagoon=ambientAudio.At(player.position,navigation&&navigation->IsNavigating())==AmbientAudio::Zone::Lagoon;
+        fireworks.Update(dt,atLagoon);
+        if(validate&&fireworks.Active()!=atLagoon)throw std::runtime_error("Pirotecnia fuera de su zona.");
+        ambientAudio.Update(player.position,navigation&&navigation->IsNavigating());
         UpdateFollowCamera(dt);
         npc.UpdateNpc(dt);
         axolote.UpdateGreeting(dt);
@@ -1051,6 +1064,8 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             axolote.UpdateGreeting(axoloteSample==0?.2:axoloteSample==5?2.1:axoloteSample==10?3.1:axoloteSample==15?4.1:axoloteSample==20?6.0:7.0);
             SetValidationCamera(axolote.ViewEye(),axolote.ViewTarget());
         }
+        if(validate&&environment&&(frame==455||frame==465||frame==475))
+            SetValidationCamera(water->Center()+glm::vec3(-2500,650,950),water->Center()+glm::vec3(0,500,0));
         const int moonFrame=environment?800:420;
         if(validate&&frame==moonFrame)SetValidationCamera(moon.Focus()+glm::vec3(0,20*ENVIRONMENT_SCALE,0),moon.Position());
         int width, height;
@@ -1066,6 +1081,9 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         const glm::mat4 projection = glm::perspective(glm::radians(fov), static_cast<float>(width) / height,
             0.02f * ENVIRONMENT_SCALE, std::max(moon.FarPlane(eye),std::max(10000.0f,sceneDiagonal*1.5f+glm::length(eye))));
         const auto lightPlanes=ExtractFrustum(projection*view);
+        lagunaDancer.UploadLighting(environmentShader,&lightPlanes);
+        lagunaDancer.UploadLighting(characterShader,&lightPlanes);
+        lagunaDancer.UploadLighting(lampShader,&lightPlanes);
         for (const Shader* shader : { &environmentShader, &characterShader, &lampShader })
         {
             shader->Use();glUniform3fv(shader->Uniform("viewPosition"),1,&eye[0]);
@@ -1094,6 +1112,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         }
         const auto drawOpaqueScene = [&]()
         {
+            glEnable(GL_DEPTH_TEST);glDepthFunc(GL_LESS);glDepthMask(GL_TRUE);glDisable(GL_BLEND);
             if (environment)
             {
                 glm::mat4 model = glm::translate(glm::mat4(1), ENVIRONMENT_TRANSLATION);
@@ -1109,7 +1128,11 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             DrawObject(basketModel,environmentShader,npc.BasketMatrix(),view,projection);
             DrawObject(npcModel,characterShader,npc.WorldMatrix(),view,projection,&npc);
             if(npc.BreadVisible())DrawObject(breadModel,environmentShader,npc.BreadMatrix(),view,projection);
+            // A model/material handoff explicitly restores unit 0 and its sampler.
+            // Exercise a foreign texture unit too, including shore and passenger poses.
+            if(validate){glActiveTexture(GL_TEXTURE3);glBindTexture(GL_TEXTURE_2D,0);RenderState::validateMaterials=true;}
             DrawObject(girl, characterShader, player.ModelMatrix(), view, projection, &player);
+            RenderState::validateMaterials=false;
             DrawObject(dog,characterShader,companion.ModelMatrix(),view,projection,&companion);
             if (lagunaDancerModel && lagunaDancer.PrepareVisible(*lagunaDancerModel,projection*view))
                 DrawObject(*lagunaDancerModel,environmentShader,lagunaDancer.ModelMatrix(*lagunaDancerModel),view,projection);
@@ -1123,12 +1146,14 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             if (guiaAntorchas.Configured() && hombreCuerpoModel && mujerCuerpoModel)
             {
                 // Hombre: Torso base, Brazo Derecho articulado oscilando al costado, Brazo Izquierdo flexionado al frente con antorcha
-                DrawObject(*hombreCuerpoModel, environmentShader, guiaAntorchas.HombreCuerpoMatrix(), view, projection);
+                const auto hombreLegs=guiaAntorchas.LegPose(GuiaLegRig::Body::Hombre);
+                DrawObject(*hombreCuerpoModel, characterShader, guiaAntorchas.HombreCuerpoMatrix(), view, projection,nullptr,&hombreLegs);
                 if (hombreBrazoDerModel) DrawObject(*hombreBrazoDerModel, environmentShader, guiaAntorchas.HombreBrazoDerMatrix(), view, projection);
                 if (hombreBrazoIzqModel) DrawObject(*hombreBrazoIzqModel, environmentShader, guiaAntorchas.HombreBrazoIzqMatrix(), view, projection);
 
                 // Mujer: Torso base, Brazo Derecho articulado oscilando al costado, Brazo Izquierdo flexionado al frente con antorcha
-                DrawObject(*mujerCuerpoModel, environmentShader, guiaAntorchas.MujerCuerpoMatrix(), view, projection);
+                const auto mujerLegs=guiaAntorchas.LegPose(GuiaLegRig::Body::Mujer);
+                DrawObject(*mujerCuerpoModel, characterShader, guiaAntorchas.MujerCuerpoMatrix(), view, projection,nullptr,&mujerLegs);
                 if (mujerBrazoDerModel) DrawObject(*mujerBrazoDerModel, environmentShader, guiaAntorchas.MujerBrazoDerMatrix(), view, projection);
                 if (mujerBrazoIzqModel) DrawObject(*mujerBrazoIzqModel, environmentShader, guiaAntorchas.MujerBrazoIzqMatrix(), view, projection);
             }
@@ -1167,7 +1192,9 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         skybox.Draw();
         glDepthMask(GL_TRUE);
         glDepthFunc(GL_LESS);
-        // Cielo y opacos primero; planos RGBA al final, ordenados de lejos a cerca.
+        // Opaque depth occludes sparks; alpha facades/fences composite over the
+        // distant sky particles (their transparent pass does not write depth).
+        fireworks.Draw(view,projection,height);
         if(billboards) billboards->Draw(view,projection);
         const bool showDialogue=NpcDialogue::IsNearby(player.position,npc.position,ENVIRONMENT_SCALE);
         dialogue.Draw(showDialogue&&!axolote.DialogueVisible(),width,height);
@@ -1190,7 +1217,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             if(showDialogue!=dialogueApproachTest)throw std::runtime_error("El dialogo no aparece/desaparece por proximidad real de la nina.");
             if(showDialogue)++dialogueNearSamples;else ++dialogueFarSamples;
         }
-        if (validate && (frame==moonFrame || captureAxolote || captureNpc || captureBoat || captureAction || frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || (frame >= 151 && frame <= 154) || frame == 155 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 305 || frame == 310 || frame == 315 || frame == 320 || frame == 325 || frame == 330 || frame == 335 || frame == 350 || frame == 390 || frame == 775))
+        if (validate && (frame==455 || frame==465 || frame==475 || frame==500 || frame==575 || frame==600 || frame==moonFrame || captureAxolote || captureNpc || captureBoat || captureAction || frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || (frame >= 151 && frame <= 154) || frame == 155 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 305 || frame == 310 || frame == 315 || frame == 320 || frame == 325 || frame == 330 || frame == 335 || frame == 350 || frame == 390 || frame == 775))
         {
             std::vector<float> depth(static_cast<size_t>(width) * height);
             glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, depth.data());
@@ -1208,6 +1235,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
                 throw std::runtime_error("F no devolvio el xolo a su posicion de seguimiento.");
             if(dialogueNearSamples<2||dialogueFarSamples<2)throw std::runtime_error("No se verificaron entrada y salida del dialogo.");
             if(axoloteDialogueSamples<4)throw std::runtime_error("Faltan los tres paneles del axolote en pantalla.");
+            std::cout<<"Materiales GPU OK: textura y sampler propios de la nina, tambien en muelle/bote y tras cambios de unidad."<<std::endl;
             std::cout<<"Axolote visual OK: aviso G, mensajes 1/2/3, cierre y salida del trigger."<<std::endl;
             std::cout<<"Dialogo OK: texto visible al acercarse y oculto al alejarse; UI RGBA sin errores."<<std::endl;
             if (ofrendaDialogue && ofrendaDialogueSamples < 1) throw std::runtime_error("El cuadro de informacion de la ofrenda no aparecio.");

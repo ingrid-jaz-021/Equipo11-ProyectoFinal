@@ -36,6 +36,7 @@
     <ClInclude Include="FuegoCamino.h" />
     <ClInclude Include="GroundSurface.h" />
     <ClInclude Include="GuiaAntorchas.h" />
+    <ClInclude Include="GuiaLegRig.h" />
     <ClInclude Include="GuiaArmPose.h" />
     <ClInclude Include="KioskNpc.h" />
     <ClInclude Include="LagunaAlmas.h" />
@@ -346,4 +347,12 @@ copy /Y "$(ProjectDir)assimp-vc140-mt.dll" "$(OutDir)"</Command>
     </GetFileHash>
     <Error Condition="'%(_PreparedEnvironment.FileHash)' != '848C9ED69960685F835D8880E62C62AF7F58A253A9E2D5610C42DD0028A84249'" Text="El escenario extraido no coincide con el original. Revisa el archivo ZIP." />
   </Target>
+  <ItemGroup>
+    <ClInclude Include="AmbientAudio.h" />
+    <ClInclude Include="Fireworks.h" />
+    <None Include="audio\Laguna.mp3" />
+    <None Include="audio\Pasillo.mp3" />
+    <None Include="Shader\fireworks.vs" />
+    <None Include="Shader\fireworks.frag" />
+  </ItemGroup>
 </Project>

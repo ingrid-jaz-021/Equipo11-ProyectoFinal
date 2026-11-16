@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="Recursos\Audio" />
     <Filter Include="Archivos de encabezado" />
     <Filter Include="Archivos de origen" />
     <Filter Include="Licencias" />
@@ -51,6 +52,7 @@
     <ClInclude Include="FuegoCamino.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="GroundSurface.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="GuiaAntorchas.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="GuiaLegRig.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="GuiaArmPose.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="KioskNpc.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="LagunaAlmas.h"><Filter>Archivos de encabezado</Filter></ClInclude>
@@ -209,5 +211,13 @@
     <None Include="images\IvanovichDialogo.png"><Filter>Recursos\images</Filter></None>
     <None Include="images\MuelleMadera.png"><Filter>Recursos\images</Filter></None>
     <None Include="images\OfrendaInfo.png"><Filter>Recursos\images</Filter></None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="AmbientAudio.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="Fireworks.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <None Include="audio\Laguna.mp3"><Filter>Recursos\Audio</Filter></None>
+    <None Include="audio\Pasillo.mp3"><Filter>Recursos\Audio</Filter></None>
+    <None Include="Shader\fireworks.vs"><Filter>Shaders</Filter></None>
+    <None Include="Shader\fireworks.frag"><Filter>Shaders</Filter></None>
   </ItemGroup>
 </Project>

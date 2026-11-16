@@ -9,6 +9,7 @@
 #include "UnicodeIO.h"
 #include "stb_image.h"
 #include "CutoutImage.h"
+#include "RenderState.h"
 
 // Todos los origenes (archivo, glTF/FBX incrustado o aiTexel) comparten el mismo filtrado.
 inline GLuint UploadRgbaTexture(const unsigned char* pixels,int width,int height,GLenum wrap=GL_REPEAT,bool cleanCutout=false)
@@ -20,6 +21,8 @@ inline GLuint UploadRgbaTexture(const unsigned char* pixels,int width,int height
         cutout.assign(pixels,pixels+static_cast<size_t>(width)*height*4);
         PrepareCutoutImage(cutout,width,height);
     }
+    GLint previousUnit=0,previousTexture=0;glGetIntegerv(GL_ACTIVE_TEXTURE,&previousUnit);
+    glActiveTexture(GL_TEXTURE0);glGetIntegerv(GL_TEXTURE_BINDING_2D,&previousTexture);
     GLuint texture=0;glGenTextures(1,&texture);glBindTexture(GL_TEXTURE_2D,texture);
     GLint alignment;glGetIntegerv(GL_UNPACK_ALIGNMENT,&alignment);glPixelStorei(GL_UNPACK_ALIGNMENT,1);
     glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,width,height,0,GL_RGBA,GL_UNSIGNED_BYTE,
@@ -38,7 +41,8 @@ inline GLuint UploadRgbaTexture(const unsigned char* pixels,int width,int height
         if(!announced){std::cout<<"Filtrado anisotropico: "<<level<<"x."<<std::endl;announced=true;}
     }
     glPixelStorei(GL_UNPACK_ALIGNMENT,alignment);
-    glBindTexture(GL_TEXTURE_2D,0);
+    glBindTexture(GL_TEXTURE_2D,previousTexture);glActiveTexture(previousUnit);
+    RenderState::Invalidate();
     return texture;
 }
 inline GLuint DecodeRgbaTexture(const unsigned char* data,size_t size,GLenum wrap=GL_REPEAT,int* outWidth=nullptr,int* outHeight=nullptr)

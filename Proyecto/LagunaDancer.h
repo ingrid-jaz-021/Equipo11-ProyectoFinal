@@ -44,6 +44,11 @@ public:
             throw std::runtime_error("XolotlDanza.fbx no tiene altura valida.");
         constexpr float characterScale = 5.0f;
         modelScale = MovementSettings::CharacterHeight * worldScale * 1.12f * characterScale / modelHeight;
+        const float height=modelHeight*modelScale;
+        lightTarget=position+glm::vec3(0,height*.43f,0);
+        lightPosition=lightTarget+glm::vec3(-height*.65f,height*1.25f,height*.8f);
+        fillPosition=lightTarget+glm::vec3(height*.65f,height*.9f,-height*.6f);
+        lightRange=height*4;
         if (!dancer.HasBakedAnimation())
             throw std::runtime_error("XolotlDanza.xanim no contiene poses para reproducir.");
         std::cout << "Xolotl en el centro del escenario: " << center.x << ", " << center.y << ", "
@@ -82,10 +87,36 @@ public:
     }
 
     bool Configured() const { return configured; }
+    void UploadLighting(const Shader& shader,const FrustumPlanes* planes=nullptr) const
+    {
+        shader.Use();const bool visible=configured&&LightSphereVisible(planes,lightPosition,lightRange);
+        glUniform1i(shader.Uniform("hasXolotlLight"),visible?1:0);if(!visible)return;
+        const auto direction=glm::normalize(lightTarget-lightPosition);
+        glUniform3fv(shader.Uniform("xolotlLight.position"),1,&lightPosition[0]);
+        glUniform3fv(shader.Uniform("xolotlLight.direction"),1,&direction[0]);
+        glUniform3f(shader.Uniform("xolotlLight.color"),2.8f,3.15f,3.8f);
+        glUniform1f(shader.Uniform("xolotlLight.range"),lightRange);
+        glUniform1f(shader.Uniform("xolotlLight.innerCutoff"),std::cos(glm::radians(26.0f)));
+        glUniform1f(shader.Uniform("xolotlLight.outerCutoff"),std::cos(glm::radians(46.0f)));
+        glUniform3fv(shader.Uniform("xolotlFill.position"),1,&fillPosition[0]);
+        glUniform3f(shader.Uniform("xolotlFill.color"),1.0f,1.2f,1.6f);
+        glUniform1f(shader.Uniform("xolotlFill.range"),lightRange*.75f);
+    }
+    void ValidateLighting(const Shader& shader) const
+    {
+        UploadLighting(shader);glm::vec3 p(0),d(0);float range=0;
+        glGetUniformfv(shader.Program,shader.Uniform("xolotlLight.position"),&p[0]);
+        glGetUniformfv(shader.Program,shader.Uniform("xolotlLight.direction"),&d[0]);
+        glGetUniformfv(shader.Program,shader.Uniform("xolotlLight.range"),&range);
+        if(glm::distance(p,lightPosition)>.001f||glm::dot(d,glm::normalize(lightTarget-p))<.999f||range<=glm::distance(p,lightTarget))
+            throw std::runtime_error("La luz de Xolotl no apunta al escenario.");
+        std::cout<<"Xolotl: reflector suave dedicado, alineado con su cuerpo y capa."<<std::endl;
+    }
 
 private:
     glm::vec3 position = glm::vec3(0.0f);
     float modelScale = 1.0f;
     float elapsed = 0.0f;
     bool configured = false;
+    glm::vec3 lightPosition{},lightTarget{},fillPosition{};float lightRange=1;
 };
