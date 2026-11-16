@@ -134,6 +134,9 @@ public:
         // Every exterior AABB is tested with a long step and oblique impacts.
         for(const auto& box:wallBoxes)for(int fps:{30,60,144})
         {
+            // Adjacent wall segments overlap at corners. Test each barrier in
+            // isolation so recovery from a different segment cannot falsify this assertion.
+            SolidObstacles barrier;barrier.SetWalls({box},scale);
             const auto size=box.max-box.min,mid=(box.min+box.max)*.5f;
             const int axis=size.x<size.z?0:2;
             for(int sign:{-1,1})
@@ -142,7 +145,7 @@ public:
                 actor.position={mid.x,0,mid.z};actor.position[axis]=sign>0?box.min[axis]-actor.height*.12f-scale:
                     box.max[axis]+actor.height*.12f+scale;
                 const auto before=actor.position;actor.velocity=glm::vec3(0);actor.velocity[axis]=sign*4000.0f;
-                actor.position+=actor.velocity/static_cast<float>(fps);walls.Resolve(actor,before);
+                actor.position+=actor.velocity/static_cast<float>(fps);barrier.Resolve(actor,before);
                 if((sign>0&&actor.position[axis]>box.min[axis]-actor.height*.12f+.01f)||
                     (sign<0&&actor.position[axis]<box.max[axis]+actor.height*.12f-.01f))
                     throw std::runtime_error("Se puede atravesar una pared exterior.");

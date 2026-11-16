@@ -45,6 +45,9 @@ uniform int pointLightCount;
 uniform vec4 pointLightRegion;
 uniform SpotLight spotLights[32];
 uniform int spotLightCount;
+uniform bool hasXolotlLight;
+uniform SpotLight xolotlLight;
+uniform PointLight xolotlFill;
 uniform TorchPointLight torchLights[2];
 uniform int torchLightCount;
 uniform vec3 viewPosition;
@@ -103,6 +106,26 @@ void main()
         float attenuation = (1.0 - smoothstep(0.72, 1.0, normalizedDistance)) /
             (1.0 + 1.5 * normalizedDistance + 4.0 * normalizedDistance * normalizedDistance);
         illumination += spotLights[i].color * surface * cone * attenuation;
+    }
+    if(hasXolotlLight)
+    {
+        vec3 delta=xolotlLight.position-WorldPosition;float squared=dot(delta,delta);
+        if(squared>0.000001&&squared<xolotlLight.range*xolotlLight.range)
+        {
+            float distanceToLight=sqrt(squared);vec3 direction=delta/distanceToLight;
+            float cone=smoothstep(xolotlLight.outerCutoff,xolotlLight.innerCutoff,
+                dot(-direction,normalize(xolotlLight.direction)));
+            float radius=distanceToLight/xolotlLight.range;
+            float attenuation=(1.0-smoothstep(.72,1.0,radius))/(1.0+1.5*radius+4.0*radius*radius);
+            illumination+=xolotlLight.color*max(dot(normal,direction),0.0)*cone*attenuation;
+        }
+        vec3 fillDelta=xolotlFill.position-WorldPosition;float fillSquared=dot(fillDelta,fillDelta);
+        if(fillSquared>0.000001&&fillSquared<xolotlFill.range*xolotlFill.range)
+        {
+            float d=sqrt(fillSquared),r=d/xolotlFill.range;
+            float attenuation=(1.0-smoothstep(.7,1.0,r))/(1.0+1.5*r+4.0*r*r);
+            illumination+=xolotlFill.color*max(dot(normal,fillDelta/d),0.0)*attenuation;
+        }
     }
     // Torches follow the hand/flame in world space. Unlike plaza lights, they
     // have no fixed region: their finite sphere of influence moves with the NPC.
