@@ -168,6 +168,15 @@ private:
     void BindMaterial(const Shader& shader) const
     {
         RenderState::BindTexture2D(material.diffuseTexture);
+        if(RenderState::validateMaterials)
+        {
+            GLint active=0,bound=0,sampler=-1,program=0;
+            glGetIntegerv(GL_ACTIVE_TEXTURE,&active);glGetIntegerv(GL_TEXTURE_BINDING_2D,&bound);
+            glGetIntegerv(GL_CURRENT_PROGRAM,&program);
+            glGetUniformiv(shader.Program,shader.Uniform("texture_diffuse1"),&sampler);
+            if(active!=GL_TEXTURE0||static_cast<GLuint>(bound)!=material.diffuseTexture||sampler!=0||static_cast<GLuint>(program)!=shader.Program)
+                throw std::runtime_error("Material: textura, unidad o shader contaminado entre objetos.");
+        }
         if(RenderState::material==&material)return;
         glUniform1i(shader.Uniform("material.hasDiffuseTexture"),material.diffuseTexture!=0);
         glUniform3fv(shader.Uniform("material.diffuseColor"),1,&material.diffuseColor[0]);

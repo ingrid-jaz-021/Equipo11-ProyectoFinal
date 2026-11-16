@@ -52,6 +52,7 @@
     <ClInclude Include="FuegoCamino.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="GroundSurface.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="GuiaAntorchas.h"><Filter>Archivos de encabezado</Filter></ClInclude>
+    <ClInclude Include="GuiaLegRig.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="GuiaArmPose.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="KioskNpc.h"><Filter>Archivos de encabezado</Filter></ClInclude>
     <ClInclude Include="LagunaAlmas.h"><Filter>Archivos de encabezado</Filter></ClInclude>

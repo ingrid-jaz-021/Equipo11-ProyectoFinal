@@ -36,6 +36,7 @@
     <ClInclude Include="FuegoCamino.h" />
     <ClInclude Include="GroundSurface.h" />
     <ClInclude Include="GuiaAntorchas.h" />
+    <ClInclude Include="GuiaLegRig.h" />
     <ClInclude Include="GuiaArmPose.h" />
     <ClInclude Include="KioskNpc.h" />
     <ClInclude Include="LagunaAlmas.h" />
