@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -10,45 +11,61 @@
 
 class Fireworks
 {
-    struct Particle{glm::vec3 p{},v{};glm::vec4 color{};float age=0,life=0,size=0;bool rocket=false;};
+    struct Particle{glm::vec3 p{},v{};glm::vec4 color{};float age=0,life=0,size=0;bool rocket=false;unsigned burst=0;};
     struct DrawVertex{glm::vec3 p;glm::vec4 color;float size;};
+    static constexpr size_t LauncherCount=6;
     static constexpr size_t Capacity=2048;
+    struct Launcher{glm::vec3 position{};double next=0;unsigned shots=0;};
+    std::array<Launcher,LauncherCount> launchers{};
     std::array<Particle,Capacity> particles{};std::vector<DrawVertex> vertices;
     Shader shader{"Shader/fireworks.vs","Shader/fireworks.frag"};GLuint vao=0,vbo=0;
-    glm::vec3 center{};float scale=1;double time=0,nextLaunch=1.2,accumulator=0;uint32_t random=0x11F357A1u;
-    unsigned launches=0,bursts=0;bool configured=false,active=false;
-    void Reset(){particles={};vertices.clear();time=accumulator=0;nextLaunch=1.2;launches=bursts=0;random=0x11F357A1u;}
+    glm::vec3 center{};float scale=1;double time=0,accumulator=0;uint32_t random=0x11F357A1u;
+    unsigned launches=0,bursts=0,dropped=0;size_t nextSlot=0;bool configured=false,active=false;
+    void Reset()
+    {
+        particles={};vertices.clear();time=accumulator=0;launches=bursts=dropped=0;nextSlot=0;random=0x11F357A1u;
+        // Opposite launchers fire in pairs; each pair has its own stagger/period.
+        for(size_t i=0;i<LauncherCount;++i){launchers[i].next=.8+(i%3)*.65;launchers[i].shots=0;}
+    }
     float Rand(){random=random*1664525u+1013904223u;return static_cast<float>(random>>8)/16777216.0f;}
     static glm::vec4 Color(unsigned i)
     {const glm::vec4 colors[]={{1,.71f,.16f,1},{1,.28f,.045f,1},{1,.12f,.65f,1},{.12f,.85f,1,1}};return colors[i%4];}
-    void Spawn(const Particle& value){for(auto& p:particles)if(p.life<=0){p=value;return;}}
+    void Spawn(const Particle& value)
+    {
+        for(size_t n=0;n<Capacity;++n){auto& p=particles[nextSlot];nextSlot=(nextSlot+1)%Capacity;if(p.life<=0){p=value;return;}}
+        ++dropped;
+    }
     void Tick(float dt)
     {
         time+=dt;
-        if(time>=nextLaunch)
+        for(size_t i=0;i<LauncherCount;++i)if(time>=launchers[i].next)
         {
-            const float angle=launches*2.399963f;
-            auto p=center+glm::vec3(std::cos(angle)*38*scale,1.5f*scale,std::sin(angle)*32*scale);
-            Spawn({p,{(Rand()-.5f)*3*scale,55*scale,(Rand()-.5f)*3*scale},Color(launches),0,1.45f,.65f*scale,true});
-            ++launches;nextLaunch+=5.0;
+            auto& emitter=launchers[i];
+            Spawn({emitter.position,{(Rand()-.5f)*4*scale,(65+Rand()*13)*scale,(Rand()-.5f)*4*scale},
+                Color(static_cast<unsigned>(i)+emitter.shots),0,1.6f+Rand()*.3f,.65f*scale,true});
+            ++emitter.shots;++launches;emitter.next+=4.8+(i%3)*.15;
         }
-        std::array<glm::vec3,4> explosions{};std::array<glm::vec4,4> colors{};size_t count=0;
+        std::array<glm::vec3,LauncherCount> explosions{};std::array<glm::vec4,LauncherCount> colors{};size_t count=0;
         for(auto& p:particles)if(p.life>0)
         {
             const float old=p.age;p.age+=dt;
             if(p.age>=p.life)
-            {if(p.rocket&&count<explosions.size()){explosions[count]=p.p;colors[count++]=p.color;++bursts;}p.life=0;continue;}
+            {if(p.rocket&&count<explosions.size()){explosions[count]=p.p;colors[count++]=p.color;}p.life=0;continue;}
             p.p+=p.v*dt+glm::vec3(0,-4.9f*scale*dt*dt,0);p.v.y-=9.8f*scale*dt;
             if(!p.rocket)p.v*=std::exp(-.45f*dt);
             else if(static_cast<int>(p.age/.04f)!=static_cast<int>(old/.04f))
                 Spawn({p.p,{0,-2*scale,0},{1,.5f,.12f,1},0,.55f,.42f*scale,false});
         }
-        for(size_t b=0;b<count;++b)for(unsigned i=0;i<112;++i)
+        for(size_t b=0;b<count;++b)
         {
-            const float y=2*Rand()-1,a=6.2831853f*Rand(),r=std::sqrt(std::max(0.0f,1-y*y));
-            const glm::vec3 direction(r*std::cos(a),y,r*std::sin(a));
-            const auto c=i%5==0?glm::vec4(1,.78f,.3f,1):colors[b];
-            Spawn({explosions[b],direction*((11+9*Rand())*scale),c,0,2.4f+Rand()*1.2f,.7f*scale,false});
+            const unsigned group=++bursts;
+            for(unsigned i=0;i<112;++i)
+            {
+                const float y=2*Rand()-1,a=6.2831853f*Rand(),r=std::sqrt(std::max(0.0f,1-y*y));
+                const glm::vec3 direction(r*std::cos(a),y,r*std::sin(a));
+                const auto c=i%5==0?glm::vec4(1,.78f,.3f,1):colors[b];
+                Spawn({explosions[b],direction*((14+10*Rand())*scale),c,0,2.4f+Rand()*1.2f,.7f*scale,false,group});
+            }
         }
     }
 public:
@@ -63,7 +80,13 @@ public:
     }
     ~Fireworks(){glDeleteBuffers(1,&vbo);glDeleteVertexArrays(1,&vao);}
     void Configure(const glm::vec3& lo,const glm::vec3& hi,const glm::vec3& origin,float worldScale)
-    {scale=worldScale;center=(glm::vec3((lo.x+hi.x)*.5f,lo.y,(lo.z+hi.z)*.5f)-origin)*scale;configured=true;}
+    {
+        scale=worldScale;center=(glm::vec3((lo.x+hi.x)*.5f,lo.y,(lo.z+hi.z)*.5f)-origin)*scale;
+        const glm::vec2 sites[LauncherCount]={{.14f,.22f},{.45f,.13f},{.82f,.22f},{.87f,.72f},{.50f,.87f},{.16f,.72f}};
+        for(size_t i=0;i<LauncherCount;++i)
+            launchers[i].position=(glm::vec3(glm::mix(lo.x,hi.x,sites[i].x),lo.y+1.5f,glm::mix(lo.z,hi.z,sites[i].y))-origin)*scale;
+        configured=true;active=false;Reset();
+    }
     void Update(float dt,bool playerAtLagoon)
     {
         if(!configured)return;
@@ -95,9 +118,28 @@ public:
     {
         for(int i=0;i<120*13;++i)Update(1.0f/120,false);
         if(launches||active)throw std::runtime_error("Pirotecnia activa fuera de la Laguna.");
-        for(int i=0;i<120*13;++i)Update(1.0f/120,true);
-        size_t alive=0;for(const auto& p:particles)if(p.life>0){++alive;if(!std::isfinite(p.p.y)||p.age<0||p.age>p.life)throw std::runtime_error("Particula invalida.");}
-        if(launches!=3||bursts<2||alive>400)throw std::runtime_error("Secuencia/capacidad de fuegos artificiales incorrecta.");
+        size_t peakAlive=0,peakRockets=0,peakGroups=0;
+        for(int step=0;step<120*20;++step)
+        {
+            Update(1.0f/120,true);size_t alive=0,rockets=0;std::array<bool,64> groups{};
+            for(const auto& p:particles)if(p.life>0)
+            {
+                ++alive;if(p.rocket)++rockets;if(p.burst&&p.burst<groups.size())groups[p.burst]=true;
+                if(!std::isfinite(p.p.y)||p.age<0||p.age>p.life)throw std::runtime_error("Particula invalida.");
+            }
+            peakAlive=std::max(peakAlive,alive);peakRockets=std::max(peakRockets,rockets);
+            peakGroups=std::max(peakGroups,static_cast<size_t>(std::count(groups.begin(),groups.end(),true)));
+        }
+        for(size_t i=0;i<LauncherCount;++i)
+        {
+            if(launchers[i].shots<3)throw std::runtime_error("Lanzador sin actividad.");
+            for(size_t j=0;j<i;++j)if(glm::distance(launchers[i].position,launchers[j].position)<20*scale)
+                throw std::runtime_error("Lanzadores superpuestos.");
+        }
+        if(peakRockets<4||peakGroups<4||dropped||peakAlive>=Capacity)
+            throw std::runtime_error("Faltan cohetes/explosiones simultaneas o se satura el pool.");
+        std::cout<<"Pirotecnia multiple OK: 6 lanzadores; maximos "<<peakRockets<<" cohetes, "<<peakGroups
+            <<" explosiones y "<<peakAlive<<" particulas; un draw, sin desbordamientos."<<std::endl;
         ValidateDepth();Update(0,false);
         if(launches||active)throw std::runtime_error("Pirotecnia residual al salir de la Laguna.");
         std::cout<<"Pirotecnia OK: apagada fuera de Laguna/bote; profundidad GPU oculta las particulas detras de opacos."<<std::endl;

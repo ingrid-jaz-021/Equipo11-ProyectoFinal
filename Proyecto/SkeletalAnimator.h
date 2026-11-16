@@ -35,6 +35,7 @@ class SkeletalAnimator
     glm::mat4 inverseRoot = glm::mat4(1);
     int idle = -1, walk = -1, run = -1;
     float idleTime = 0.0f;
+    bool stableIdle=false;
 
     void InitializeArmLimits()
     {
@@ -263,6 +264,9 @@ public:
         Evaluate(phase,gait,running);
     }
     void Reset() { idleTime=0.0f; Evaluate(0.0f,0.0f,0.0f); }
+    // Freeze the authored neutral Idle pose, rather than replaying noisy root,
+    // head or limb tracks. Only enabled for the girl; NPC/dog clips are intact.
+    void UseStableIdle(){stableIdle=true;Reset();}
     float Duration(const std::string& name) const{return clips.at(FindClip(name)).duration;}
     bool HasClip(const std::string& name) const{return FindClip(name,false)>=0;}
     void UpdateLayered(float dt,float phase,float gait,float running,const std::string& clip,float time,float weight)
@@ -277,11 +281,17 @@ public:
         auto& global=globalPose;
         for(int i=0;i<static_cast<int>(nodes.size());++i)
         {
-            const Node a=PoseNode(i,idle,idleTime),b=PoseNode(i,walk,cycle*clips[walk].duration),
-                c=PoseNode(i,run,cycle*clips[run].duration);
-            glm::vec3 p=glm::mix(a.p,glm::mix(b.p,c.p,running),gait);
-            glm::vec3 s=glm::mix(a.s,glm::mix(b.s,c.s,running),gait);
-            glm::quat q=glm::normalize(glm::slerp(a.q,glm::slerp(b.q,c.q,running),gait));
+            const Node a=PoseNode(i,idle,stableIdle?0.0f:idleTime);
+            glm::vec3 p=a.p,s=a.s;glm::quat q=a.q;
+            // At zero weight use the exact neutral pose. Even a zero-weight
+            // slerp can introduce phase-dependent round-off from walking tracks.
+            if(gait>0)
+            {
+                const Node b=PoseNode(i,walk,cycle*clips[walk].duration),c=PoseNode(i,run,cycle*clips[run].duration);
+                p=glm::mix(a.p,glm::mix(b.p,c.p,running),gait);
+                s=glm::mix(a.s,glm::mix(b.s,c.s,running),gait);
+                q=glm::normalize(glm::slerp(a.q,glm::slerp(b.q,c.q,running),gait));
+            }
             if(overlayId>=0)
             {
                 const Node action=PoseNode(i,overlayId,overlayTime,false);
