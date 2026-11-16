@@ -43,6 +43,8 @@
 #include "SolidObstacles.h"
 #include "MoonSky.h"
 #include "WorldBoundaries.h"
+#include "AmbientAudio.h"
+#include "Fireworks.h"
 
 namespace
 {
@@ -689,6 +691,8 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
     }
     GroundSurface ground;
     WorldBoundaries boundaries;
+    AmbientAudio ambientAudio(validate);
+    Fireworks fireworks;
     std::unique_ptr<Model> environment;
     if (!characterOnly)
     {
@@ -784,6 +788,9 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         boundaries.Build(*environment,ground,SOURCE_SPAWN,ENVIRONMENT_SCALE,water->SourceMin(),water->SourceMax());
         if(validate)boundaries.Validate(ground);
         activeBoundaries=&boundaries;
+        ambientAudio.Configure(*environment,SOURCE_SPAWN,ENVIRONMENT_SCALE,water->SourceMin(),water->SourceMax());
+        fireworks.Configure(water->SourceMin(),water->SourceMax(),SOURCE_SPAWN,ENVIRONMENT_SCALE);
+        if(validate){ambientAudio.Validate();fireworks.Validate();lagunaDancer.ValidateLighting(environmentShader);}
     }
     Skybox skybox;
     UpdateWindowTitle(window);
@@ -888,6 +895,8 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         else DoMovement(window,dt,environment?&ground:nullptr);
         if (lagunaDancerModel) lagunaDancer.Update(dt);
         lagunaAlmas.Update(dt);
+        fireworks.Update(dt);
+        ambientAudio.Update(player.position,navigation&&navigation->IsNavigating());
         UpdateFollowCamera(dt);
         npc.UpdateNpc(dt);
         axolote.UpdateGreeting(dt);
@@ -1051,6 +1060,8 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             axolote.UpdateGreeting(axoloteSample==0?.2:axoloteSample==5?2.1:axoloteSample==10?3.1:axoloteSample==15?4.1:axoloteSample==20?6.0:7.0);
             SetValidationCamera(axolote.ViewEye(),axolote.ViewTarget());
         }
+        if(validate&&environment&&(frame==455||frame==465||frame==475))
+            SetValidationCamera(water->Center()+glm::vec3(-2500,650,950),water->Center()+glm::vec3(0,500,0));
         const int moonFrame=environment?800:420;
         if(validate&&frame==moonFrame)SetValidationCamera(moon.Focus()+glm::vec3(0,20*ENVIRONMENT_SCALE,0),moon.Position());
         int width, height;
@@ -1066,6 +1077,9 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         const glm::mat4 projection = glm::perspective(glm::radians(fov), static_cast<float>(width) / height,
             0.02f * ENVIRONMENT_SCALE, std::max(moon.FarPlane(eye),std::max(10000.0f,sceneDiagonal*1.5f+glm::length(eye))));
         const auto lightPlanes=ExtractFrustum(projection*view);
+        lagunaDancer.UploadLighting(environmentShader,&lightPlanes);
+        lagunaDancer.UploadLighting(characterShader,&lightPlanes);
+        lagunaDancer.UploadLighting(lampShader,&lightPlanes);
         for (const Shader* shader : { &environmentShader, &characterShader, &lampShader })
         {
             shader->Use();glUniform3fv(shader->Uniform("viewPosition"),1,&eye[0]);
@@ -1169,6 +1183,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
         glDepthFunc(GL_LESS);
         // Cielo y opacos primero; planos RGBA al final, ordenados de lejos a cerca.
         if(billboards) billboards->Draw(view,projection);
+        fireworks.Draw(view,projection,height);
         const bool showDialogue=NpcDialogue::IsNearby(player.position,npc.position,ENVIRONMENT_SCALE);
         dialogue.Draw(showDialogue&&!axolote.DialogueVisible(),width,height);
         axolote.DrawDialogue(width,height);
@@ -1190,7 +1205,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
             if(showDialogue!=dialogueApproachTest)throw std::runtime_error("El dialogo no aparece/desaparece por proximidad real de la nina.");
             if(showDialogue)++dialogueNearSamples;else ++dialogueFarSamples;
         }
-        if (validate && (frame==moonFrame || captureAxolote || captureNpc || captureBoat || captureAction || frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || (frame >= 151 && frame <= 154) || frame == 155 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 305 || frame == 310 || frame == 315 || frame == 320 || frame == 325 || frame == 330 || frame == 335 || frame == 350 || frame == 390 || frame == 775))
+        if (validate && (frame==455 || frame==465 || frame==475 || frame==500 || frame==moonFrame || captureAxolote || captureNpc || captureBoat || captureAction || frame == 0 || frame == 45 || frame == 95 || frame == 120 || frame == 130 || frame == 140 || frame == 150 || (frame >= 151 && frame <= 154) || frame == 155 || frame == 160 || frame == 170 || frame == 180 || frame == 190 || frame == 200 || frame == 210 || frame == 220 || frame == 230 || frame == 240 || frame == 250 || frame == 260 || frame == 270 || frame == 280 || frame == 290 || frame == 300 || frame == 305 || frame == 310 || frame == 315 || frame == 320 || frame == 325 || frame == 330 || frame == 335 || frame == 350 || frame == 390 || frame == 775))
         {
             std::vector<float> depth(static_cast<size_t>(width) * height);
             glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, depth.data());
