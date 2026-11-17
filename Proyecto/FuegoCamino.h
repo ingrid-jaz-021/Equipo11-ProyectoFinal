@@ -1,5 +1,6 @@
 #pragma once
 #include <iostream>
+#include <unordered_map>
 #include <vector>
 #include <string>
 #include <cmath>
@@ -72,7 +73,6 @@ public:
         };
 
         modelMatrices.clear();
-        worldPositions.clear();
         lights.clear();
         uniformNames.clear();
 
@@ -94,7 +94,6 @@ public:
 
             const glm::vec3 localPos(coord.x, surfaceY + bottomOffset, coord.y);
             const glm::vec3 worldPos = (localPos - origin) * scale;
-            worldPositions.push_back(worldPos);
 
             glm::mat4 m = glm::translate(glm::mat4(1.0f), worldPos);
             m = glm::scale(m, glm::vec3(scale * ModelScale));
@@ -121,20 +120,24 @@ public:
     }
 
     // Actualiza las luces puntuales calidas de cada fuego con parpadeo organico asincrono
-    void UploadLights(const Shader& shader, float now) const
+    void UploadLights(const Shader& shader, float now,const FrustumPlanes* planes=nullptr) const
     {
         if (!configured || lights.empty()) return;
         shader.Use();
 
-        glUniform1i(shader.Uniform("fuegoCaminoLightCount"), static_cast<int>(lights.size()));
-        glUniform4fv(shader.Uniform("fuegoCaminoRegion"), 1, &lightRegion[0]);
+        std::vector<size_t> ids;ids.reserve(lights.size());
+        for(size_t i=0;i<lights.size();++i)if(LightSphereVisible(planes,lights[i].worldPosition,42))ids.push_back(i);
+        const bool changed=!lastVisible.count(shader.Program)||lastVisible[shader.Program]!=ids;
+        if(changed){lastVisible[shader.Program]=ids;glUniform1i(shader.Uniform("fuegoCaminoLightCount"),static_cast<int>(ids.size()));glUniform4fv(shader.Uniform("fuegoCaminoRegion"),1,&lightRegion[0]);}
+        int visible=0;
 
         // Color fuego calido (ambar/dorado, identico a las antorchas)
         const glm::vec3 baseFireColor(1.0f, 0.58f, 0.16f);
         constexpr float range = 42.0f; // Alcance para iluminar el brasero, la banqueta y flores cercanas
 
-        for (size_t i = 0; i < lights.size(); ++i)
+        for (size_t i : ids)
         {
+            const auto& names=uniformNames[visible++];
             const float ph = lights[i].flickerPhase;
             const float fr = lights[i].flickerFreq;
             const float flicker = 0.13f * std::sin(now * fr + ph)
@@ -143,9 +146,9 @@ public:
 
             const glm::vec3 color = baseFireColor * (1.65f + flicker);
 
-            glUniform3fv(shader.Uniform(uniformNames[i].posName), 1, &lights[i].worldPosition[0]);
-            glUniform3fv(shader.Uniform(uniformNames[i].colName), 1, &color[0]);
-            glUniform1f(shader.Uniform(uniformNames[i].rangeName), range);
+            if(changed)glUniform3fv(shader.Uniform(names.posName), 1, &lights[i].worldPosition[0]);
+            glUniform3fv(shader.Uniform(names.colName), 1, &color[0]);
+            if(changed)glUniform1f(shader.Uniform(names.rangeName), range);
         }
     }
 
@@ -159,12 +162,10 @@ public:
     bool Configured() const { return configured; }
     size_t Count() const { return modelMatrices.size(); }
     const std::vector<glm::mat4>& Matrices() const { return modelMatrices; }
-    const std::vector<glm::vec3>& WorldPositions() const { return worldPositions; }
-    const std::vector<LightPoint>& Lights() const { return lights; }
 
 private:
+    mutable std::unordered_map<GLuint,std::vector<size_t>> lastVisible;
     std::vector<glm::mat4> modelMatrices;
-    std::vector<glm::vec3> worldPositions;
     std::vector<LightPoint> lights;
     std::vector<LightUniformNames> uniformNames;
     glm::vec4 lightRegion = glm::vec4(0.0f);

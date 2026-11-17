@@ -32,7 +32,6 @@ public:
         position = glm::vec3(0.0f);
         velocity = glm::vec3(0.0f);
         yaw = phase = gait = running = 0.0f;
-        hadInput = false;
         fallVelocity = 0.0f;
         if (animator) animator->Reset();
     }
@@ -56,18 +55,19 @@ public:
     {
         if (frozen) return;
         const bool moving = glm::dot(input, input) > 0.001f;
-        if (moving && !hadInput)
-        {
-            cameraForward.y = 0.0f;
-            movementForward = glm::dot(cameraForward, cameraForward) > 0.001f
-                ? glm::normalize(cameraForward) : glm::vec3(0, 0, 1);
-        }
-        hadInput = moving;
+        cameraForward.y = 0.0f;
+        const glm::vec3 movementForward = glm::dot(cameraForward,cameraForward)>.001f
+            ?glm::normalize(cameraForward):Forward();
+        // The entire model follows the independent camera heading, including
+        // while idle, reversing or strafing. Keyboard never changes camera yaw.
+        const float targetYaw=std::atan2(movementForward.x,movementForward.z);
+        yaw=std::remainder(yaw+std::remainder(targetYaw-yaw,6.28318530718f)*
+            (1-std::exp(-12.0f*dt)),6.28318530718f);
+        if(std::abs(std::remainder(targetYaw-yaw,6.28318530718f))<.0001f)yaw=targetYaw;
         glm::vec3 desired(0.0f);
         if (moving)
         {
-            // Mantener la base durante cada pulsacion evita realimentar el giro
-            // de la camara de seguimiento al mantener A/D o S.
+            // Recompute from camera yaw every step, even with a key held.
             input = glm::normalize(input);
             const glm::vec3 right = glm::cross(movementForward, glm::vec3(0, 1, 0));
             desired = movementForward * input.y + right * input.x;
@@ -84,9 +84,6 @@ public:
         const float actualSpeed = glm::length(velocity);
         if (actualSpeed > worldScale * 0.02f)
         {
-            const float targetYaw = std::atan2(velocity.x, velocity.z);
-            const float delta = std::remainder(targetYaw - yaw, 6.28318530718f);
-            yaw += delta * (1.0f - std::exp(-12.0f * dt));
             // Proporcion respecto a la altura: FBX puede usar centimetros.
             const float cycleDistance = height * glm::mix(MovementSettings::WalkStrideHeightRatio,MovementSettings::RunStrideHeightRatio,running);
             const float advance=glm::length(displacement)*6.28318530718f/cycleDistance;
@@ -95,6 +92,7 @@ public:
         }
         const float weight = glm::clamp(actualSpeed / (worldScale * MovementSettings::WalkSpeed), 0.0f, 1.0f);
         gait = glm::mix(gait, weight, 1.0f - std::exp(-9.0f * dt));
+        if(!moving&&weight<.0001f&&gait<.002f){velocity=glm::vec3(0);gait=running=0;}
         if(animate)AnimateFrame(dt);
     }
     void AnimateFrame(float dt){if(animator&&!frozen)animator->Update(dt,phase,gait,running);}
@@ -127,6 +125,7 @@ public:
     }
     glm::mat4 ModelMatrix() const
     {
+        // World orientation is yaw-only: no residual pitch/roll at rest or on slopes.
         glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
         model = glm::rotate(model, yaw, glm::vec3(0, 1, 0));
         model = glm::scale(model, glm::vec3(modelScale));
@@ -136,42 +135,42 @@ private:
     SkeletalAnimator* animator = nullptr;
     bool frozen = false;
     float fallVelocity = 0.0f;
-    bool hadInput = false;
-    glm::vec3 movementForward = glm::vec3(0, 0, 1);
 };
 
 class FollowCamera
 {
 public:
-    float pitch = 18.0f, orbit = 18.0f, distance = MovementSettings::FollowDistance;
+    float pitch = 18.0f, yaw = 0.0f, distance = MovementSettings::FollowDistance;
     glm::vec3 position = glm::vec3(0.0f);
     glm::vec3 target = glm::vec3(0.0f);
     void Mouse(float x, float y)
     {
-        orbit = glm::clamp(orbit - x * 0.15f, -65.0f, 65.0f);
-        pitch = glm::clamp(pitch + y * 0.15f, 0.0f, 60.0f);
+        yaw=std::remainder(yaw-glm::radians(x*.15f),6.28318530718f);
+        pitch=glm::clamp(pitch-y*.15f,-10.0f,72.0f);
     }
     void Scroll(float amount) { distance = glm::clamp(distance - amount * 0.4f, 3.8f, 12.0f); }
-    void Reset() { pitch = 18.0f; orbit = 18.0f; distance = MovementSettings::FollowDistance; initialized = false; }
+    void Reset() { pitch = 18.0f; yaw = 0.0f; distance = MovementSettings::FollowDistance; initialized = false; }
     void Update(const CharacterController& player, float dt, float scale, bool snap = false)
     {
-        UpdateAnchor(player.position,player.yaw,player.height,dt,scale,0,snap);
+        UpdateAnchor(player.position,player.height,dt,scale,0,snap);
     }
-    void UpdateAnchor(const glm::vec3& anchor,float yaw,float height,float dt,float scale,float minimumDistance,bool snap=false)
+    void UpdateAnchor(const glm::vec3& anchor,float height,float dt,float scale,float minimumDistance,bool snap=false)
     {
         const glm::vec3 desiredTarget = anchor + glm::vec3(0, height * 0.68f, 0);
-        const float angle = yaw + glm::radians(orbit);
+        const float angle = yaw;
         const float elevation = glm::radians(pitch);
         const glm::vec3 offset(-std::sin(angle) * std::cos(elevation),
             std::sin(elevation), -std::cos(angle) * std::cos(elevation));
-        const glm::vec3 desiredPosition = desiredTarget + offset * std::max(distance,minimumDistance) * scale;
         const float blend = !initialized || snap ? 1.0f : 1.0f - std::exp(-9.0f * dt);
         target = glm::mix(target, desiredTarget, blend);
-        position = glm::mix(position, desiredPosition, blend);
+        // Smooth follow translation; mouse orientation remains responsive and
+        // independent of body/boat rotation, avoiding a feedback loop.
+        position=target+offset*std::max(distance,minimumDistance)*scale;
+        position.y=std::max(position.y,anchor.y+height*.18f);
         initialized = true;
     }
     glm::mat4 View() const { return glm::lookAt(position, target, glm::vec3(0, 1, 0)); }
-    glm::vec3 Forward() const { return glm::normalize(target - position); }
+    glm::vec3 Forward() const { return {std::sin(yaw),0,std::cos(yaw)}; }
 private:
     bool initialized = false;
 };

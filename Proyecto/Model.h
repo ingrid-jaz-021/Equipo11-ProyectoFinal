@@ -20,7 +20,6 @@
 #include <assimp/postprocess.h>
 #include <assimp/config.h>
 #include "Mesh.h"
-#include "stb_image.h"
 #include "UnicodeIO.h"
 #include "GroundSurface.h"
 #include "SkeletalAnimator.h"
@@ -28,6 +27,7 @@
 #include "FloorUV.h"
 #include "MovementSettings.h"
 #include "DockSurface.h"
+#include "GuiaLegRig.h"
 
 struct ModelOptions
 {
@@ -35,6 +35,7 @@ struct ModelOptions
     bool skeletal = false;
     std::vector<std::string> boundaryProfileMaterials;
     bool requireLocomotion=true;
+    GuiaLegRig::Body guideLegs=GuiaLegRig::Body::None;
 };
 
 class Model
@@ -58,6 +59,10 @@ public:
 
     void Draw(const Shader& shader,const glm::mat4& clipFromModel,bool cull,const glm::mat4& baseModel) const
     {
+        shader.Use();
+        // Every model owns its material handoff, including after water/UI/particles.
+        RenderState::BeginMaterials();
+        glUniform1i(shader.Uniform("texture_diffuse1"),0);
         const auto basePlanes=ExtractFrustum(clipFromModel);
         if(cull&&!BoundsVisible(basePlanes,minBounds,maxBounds)){++RenderMetrics::culled;return;}
         const auto baseNormal=glm::transpose(glm::inverse(glm::mat3(baseModel)));
@@ -86,8 +91,12 @@ public:
         if(visibleInstances.empty())return;
         shader.Use();glUniformMatrix4fv(shader.Uniform("viewProjection"),1,GL_FALSE,&viewProjection[0][0]);
         if(!instanceBuffer)glGenBuffers(1,&instanceBuffer);
-        glBindBuffer(GL_ARRAY_BUFFER,instanceBuffer);
-        glBufferData(GL_ARRAY_BUFFER,visibleInstances.size()*sizeof(glm::mat4),visibleInstances.data(),GL_STREAM_DRAW);
+        if(uploadedInstances!=visibleInstances)
+        {
+            glBindBuffer(GL_ARRAY_BUFFER,instanceBuffer);
+            glBufferData(GL_ARRAY_BUFFER,visibleInstances.size()*sizeof(glm::mat4),visibleInstances.data(),GL_STREAM_DRAW);
+            uploadedInstances=visibleInstances;
+        }
         for(const auto& mesh:meshes)
         {
             if(!mesh.HasIdentityTransform())throw std::runtime_error("El lote de farolas requiere mallas en el espacio comun del modelo.");
@@ -148,7 +157,8 @@ public:
         const float blend=sample-static_cast<float>(first);
         for(size_t m=0;m<bakedMeshes.size();++m)
         {
-            auto vertices=bakedMeshes[m].base;
+            auto& vertices=bakedMeshes[m].scratch;
+            if(vertices.empty())vertices=bakedMeshes[m].base;
             const auto& a=bakedMeshes[m].frames[first];const auto& b=bakedMeshes[m].frames[second];
             for(size_t v=0;v<vertices.size();++v)
             {
@@ -192,14 +202,14 @@ private:
 
     std::vector<Mesh> meshes;
     mutable GLuint instanceBuffer=0;
-    mutable std::vector<glm::mat4> visibleInstances;
+    mutable std::vector<glm::mat4> visibleInstances,uploadedInstances;
     std::unordered_map<std::string, GLuint> texturesLoaded;
     std::string directory;
     ModelOptions options;
     std::unordered_map<std::string,std::vector<glm::vec3>> materialProfiles;
     std::unique_ptr<SkeletalAnimator> skeleton;
     struct BakedVertex {glm::vec3 position,normal;};
-    struct BakedMeshFrames {std::vector<Vertex> base;std::vector<std::vector<BakedVertex>> frames;};
+    struct BakedMeshFrames {std::vector<Vertex> base,scratch;std::vector<std::vector<BakedVertex>> frames;};
     std::vector<BakedMeshFrames> bakedMeshes;
     float bakedDuration=0.0f;
     struct Bounds { glm::vec3 min, max; };
@@ -411,6 +421,8 @@ private:
             materialName = name.C_Str();
         }
         if (options.skeletal) skin = skeleton->Weights(mesh);
+        const GuiaLegRig guideRig{options.guideLegs};
+        if(options.guideLegs!=GuiaLegRig::Body::None)skin.reserve(mesh->mNumVertices);
         glm::vec3 meshMin((std::numeric_limits<float>::max)());
         glm::vec3 meshMax((std::numeric_limits<float>::lowest)());
         vertices.reserve(mesh->mNumVertices);
@@ -419,6 +431,7 @@ private:
         {
             Vertex vertex{};
             vertex.Position = glm::vec3(mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z);
+            if(options.guideLegs!=GuiaLegRig::Body::None)skin.push_back(guideRig.Weights(vertex.Position));
             if(options.ground&&materialName=="tarima_madera.001")vertex.Position=DockSurface::AlignVertex(vertex.Position);
             vertex.Normal = mesh->HasNormals()
                 ? glm::vec3(mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z)

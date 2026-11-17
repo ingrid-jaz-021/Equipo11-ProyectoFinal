@@ -78,6 +78,7 @@ public:
         VAO(other.VAO), VBO(other.VBO), EBO(other.EBO), skinVBO(other.skinVBO),localTransform(other.localTransform),
         localNormal(other.localNormal),identityTransform(other.identityTransform),chunks(std::move(other.chunks))
     {
+        configuredInstanceBuffer=other.configuredInstanceBuffer;
         other.VAO = other.VBO = other.EBO = 0;
         other.skinVBO = 0;
     }
@@ -91,7 +92,7 @@ public:
             VAO = other.VAO; VBO = other.VBO; EBO = other.EBO;
             skinVBO = other.skinVBO;
             localTransform=other.localTransform;
-            localNormal=other.localNormal;identityTransform=other.identityTransform;chunks=std::move(other.chunks);
+            localNormal=other.localNormal;identityTransform=other.identityTransform;chunks=std::move(other.chunks);configuredInstanceBuffer=other.configuredInstanceBuffer;
             other.VAO = other.VBO = other.EBO = 0;
             other.skinVBO = 0;
         }
@@ -109,6 +110,8 @@ public:
     {
         if(vertices.size()!=vertexCount)throw std::runtime_error("La secuencia de malla cambio su topologia.");
         glBindBuffer(GL_ARRAY_BUFFER,VBO);
+        // Orphaning evita esperar al frame anterior; mismo VBO y misma geometria.
+        glBufferData(GL_ARRAY_BUFFER,vertices.size()*sizeof(Vertex),nullptr,GL_STREAM_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER,0,vertices.size()*sizeof(Vertex),vertices.data());
         glBindBuffer(GL_ARRAY_BUFFER,0);
     }
@@ -135,11 +138,16 @@ public:
     void DrawInstanced(const Shader& shader,GLuint instanceBuffer,GLsizei count) const
     {
         if(!count)return;
-        BindMaterial(shader);RenderState::BindVao(VAO);glBindBuffer(GL_ARRAY_BUFFER,instanceBuffer);
-        for(GLuint col=0;col<4;++col)
+        BindMaterial(shader);RenderState::BindVao(VAO);
+        if(configuredInstanceBuffer!=instanceBuffer)
         {
-            glEnableVertexAttribArray(3+col);glVertexAttribPointer(3+col,4,GL_FLOAT,GL_FALSE,sizeof(glm::mat4),reinterpret_cast<void*>(sizeof(glm::vec4)*col));
-            glVertexAttribDivisor(3+col,1);
+            glBindBuffer(GL_ARRAY_BUFFER,instanceBuffer);
+            for(GLuint col=0;col<4;++col)
+            {
+                glEnableVertexAttribArray(3+col);glVertexAttribPointer(3+col,4,GL_FLOAT,GL_FALSE,sizeof(glm::mat4),reinterpret_cast<void*>(sizeof(glm::vec4)*col));
+                glVertexAttribDivisor(3+col,1);
+            }
+            configuredInstanceBuffer=instanceBuffer;
         }
         glDrawElementsInstanced(GL_TRIANGLES,indexCount,GL_UNSIGNED_INT,nullptr,count);RenderMetrics::Draw(indexCount,count);
     }
@@ -151,6 +159,7 @@ private:
     size_t vertexCount=0;
     GLuint VAO = 0, VBO = 0, EBO = 0;
     GLuint skinVBO = 0;
+    mutable GLuint configuredInstanceBuffer=0;
     glm::mat4 localTransform=glm::mat4(1);
     glm::mat3 localNormal=glm::mat3(1);bool identityTransform=true;
     struct Chunk{glm::vec3 lo,hi;GLsizei count;uintptr_t byteOffset;};
@@ -159,6 +168,15 @@ private:
     void BindMaterial(const Shader& shader) const
     {
         RenderState::BindTexture2D(material.diffuseTexture);
+        if(RenderState::validateMaterials)
+        {
+            GLint active=0,bound=0,sampler=-1,program=0;
+            glGetIntegerv(GL_ACTIVE_TEXTURE,&active);glGetIntegerv(GL_TEXTURE_BINDING_2D,&bound);
+            glGetIntegerv(GL_CURRENT_PROGRAM,&program);
+            glGetUniformiv(shader.Program,shader.Uniform("texture_diffuse1"),&sampler);
+            if(active!=GL_TEXTURE0||static_cast<GLuint>(bound)!=material.diffuseTexture||sampler!=0||static_cast<GLuint>(program)!=shader.Program)
+                throw std::runtime_error("Material: textura, unidad o shader contaminado entre objetos.");
+        }
         if(RenderState::material==&material)return;
         glUniform1i(shader.Uniform("material.hasDiffuseTexture"),material.diffuseTexture!=0);
         glUniform3fv(shader.Uniform("material.diffuseColor"),1,&material.diffuseColor[0]);

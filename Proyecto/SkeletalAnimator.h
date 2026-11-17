@@ -35,6 +35,9 @@ class SkeletalAnimator
     glm::mat4 inverseRoot = glm::mat4(1);
     int idle = -1, walk = -1, run = -1;
     float idleTime = 0.0f;
+    bool stableIdle=false;
+    std::vector<Node> uprightIdle;
+    std::unordered_map<int,glm::mat4> uprightAxisPose;
 
     void InitializeArmLimits()
     {
@@ -174,6 +177,52 @@ class SkeletalAnimator
         result.q=Sample(found->second.q,time,result.q);
         return result;
     }
+    void BuildUprightIdle()
+    {
+        if(!boneIds.count("Hips")||!boneIds.count("Chest")||!boneIds.count("Head"))
+            throw std::runtime_error("El Idle humano necesita cadera, pecho y cabeza.");
+        // FBX node defaults contain the first mocap frame, NOT the original
+        // relaxed bind pose. Recover that pose from Assimp's inverse binds.
+        const auto bindHip=glm::inverse(bones[boneIds.at("Hips")].offset);
+        const auto modelFromBind=glm::mat4_cast(glm::inverse(glm::normalize(glm::quat_cast(glm::mat3(bindHip)))));
+        const auto sceneFromModel=glm::inverse(inverseRoot);
+        std::unordered_map<int,glm::mat4> neutral;
+        for(const auto& bone:bones)neutral.emplace(bone.node,modelFromBind*glm::inverse(bone.offset));
+        const auto hipPosition=glm::vec3(neutral.at(nodeIds.at("Hips"))[3]);
+        uprightAxisPose.clear();uprightAxisPose[nodeIds.at("Root")]=sceneFromModel;
+        for(const char* name:{"Hips","Spine","Chest","Neck","Head"})
+        {
+            const int id=nodeIds.at(name);auto p=glm::vec3(neutral.at(id)[3]);
+            p.x=hipPosition.x;p.z=hipPosition.z;
+            // Exactly zero pitch, roll and local heading on the axial chain.
+            neutral[id]=glm::translate(glm::mat4(1),p);
+            uprightAxisPose[id]=sceneFromModel*neutral[id];
+        }
+        const glm::mat4 mirror(-1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1);
+        for(const char* joint:{"UpperArm","Forearm","Hand","Thigh","Shin","Foot"})
+        {
+            auto& left=neutral.at(nodeIds.at(std::string(joint)+".L"));
+            auto& right=neutral.at(nodeIds.at(std::string(joint)+".R"));
+            const auto l=glm::vec3(left[3]),r=glm::vec3(right[3]);
+            const float side=(std::abs(l.x-hipPosition.x)+std::abs(r.x-hipPosition.x))*.5f;
+            left[3]=glm::vec4(hipPosition.x+side,(l.y+r.y)*.5f,(l.z+r.z)*.5f,1);
+            right=mirror*left*mirror;right[3].x=hipPosition.x-side;
+        }
+        uprightIdle.resize(nodes.size());std::vector<glm::mat4> global(nodes.size());
+        for(size_t i=0;i<nodes.size();++i)
+        {
+            auto pose=PoseNode(static_cast<int>(i),idle,0);
+            const auto parent=nodes[i].parent<0?glm::mat4(1):global[nodes[i].parent];
+            auto found=neutral.find(static_cast<int>(i));
+            if(nodeIds.at("Root")==static_cast<int>(i))global[i]=sceneFromModel;
+            else if(found!=neutral.end())global[i]=sceneFromModel*found->second;
+            else global[i]=parent*glm::translate(glm::mat4(1),pose.p)*glm::mat4_cast(pose.q)*glm::scale(glm::mat4(1),pose.s);
+            const auto local=glm::inverse(parent)*global[i];pose.p=glm::vec3(local[3]);
+            glm::mat3 rotation(local);
+            for(int col=0;col<3;++col){pose.s[col]=glm::length(rotation[col]);rotation[col]/=pose.s[col];}
+            pose.q=glm::normalize(glm::quat_cast(rotation));uprightIdle[i]=pose;
+        }
+    }
 public:
     explicit SkeletalAnimator(const aiScene* scene,bool requireLocomotion=true)
     {
@@ -263,6 +312,8 @@ public:
         Evaluate(phase,gait,running);
     }
     void Reset() { idleTime=0.0f; Evaluate(0.0f,0.0f,0.0f); }
+    // Upright, symmetric relaxed bind pose; only the girl's Idle uses it.
+    void UseStableIdle(){BuildUprightIdle();stableIdle=true;Reset();}
     float Duration(const std::string& name) const{return clips.at(FindClip(name)).duration;}
     bool HasClip(const std::string& name) const{return FindClip(name,false)>=0;}
     void UpdateLayered(float dt,float phase,float gait,float running,const std::string& clip,float time,float weight)
@@ -277,11 +328,17 @@ public:
         auto& global=globalPose;
         for(int i=0;i<static_cast<int>(nodes.size());++i)
         {
-            const Node a=PoseNode(i,idle,idleTime),b=PoseNode(i,walk,cycle*clips[walk].duration),
-                c=PoseNode(i,run,cycle*clips[run].duration);
-            glm::vec3 p=glm::mix(a.p,glm::mix(b.p,c.p,running),gait);
-            glm::vec3 s=glm::mix(a.s,glm::mix(b.s,c.s,running),gait);
-            glm::quat q=glm::normalize(glm::slerp(a.q,glm::slerp(b.q,c.q,running),gait));
+            const Node a=stableIdle?uprightIdle[i]:PoseNode(i,idle,idleTime);
+            glm::vec3 p=a.p,s=a.s;glm::quat q=a.q;
+            // At zero weight use the exact neutral pose. Even a zero-weight
+            // slerp can introduce phase-dependent round-off from walking tracks.
+            if(gait>0)
+            {
+                const Node b=PoseNode(i,walk,cycle*clips[walk].duration),c=PoseNode(i,run,cycle*clips[run].duration);
+                p=glm::mix(a.p,glm::mix(b.p,c.p,running),gait);
+                s=glm::mix(a.s,glm::mix(b.s,c.s,running),gait);
+                q=glm::normalize(glm::slerp(a.q,glm::slerp(b.q,c.q,running),gait));
+            }
             if(overlayId>=0)
             {
                 const Node action=PoseNode(i,overlayId,overlayTime,false);
@@ -290,6 +347,11 @@ public:
             }
             const glm::mat4 local=glm::translate(glm::mat4(1),p)*glm::mat4_cast(q)*glm::scale(glm::mat4(1),s);
             global[i]=(nodes[i].parent<0?glm::mat4(1):global[nodes[i].parent])*local;
+            if(stableIdle&&gait==0&&overlayWeight==0)
+            {
+                const auto axis=uprightAxisPose.find(i);
+                if(axis!=uprightAxisPose.end())global[i]=axis->second;
+            }
             // Ultima barrera, DESPUES de mezclar clips: tambien limita poses
             // interpoladas, overlays y cualquier accion futura del personaje.
             ConstrainArm(i);

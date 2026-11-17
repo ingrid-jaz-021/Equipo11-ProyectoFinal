@@ -47,7 +47,6 @@ public:
         }
         ApplyPose();
     }
-    State CurrentState() const{return state;}
     bool BreadVisible() const{return (state==State::Appear||state==State::Eating)&&BreadAmount()>.05f;}
     float BreadAmount() const
     {return state==State::Eating?1-.95f*glm::clamp(static_cast<float>((time-1.2)/3.3),0.0f,1.0f):state==State::Appear?1.0f:0.0f;}

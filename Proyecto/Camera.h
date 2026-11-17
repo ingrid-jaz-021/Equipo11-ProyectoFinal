@@ -1,7 +1,7 @@
 #pragma once
 
-// Std. Includes
-#include <vector>
+// Standard library
+#include <cmath>
 
 // GL Includes
 #include <GL/glew.h>
@@ -37,53 +37,11 @@ public:
 		this->yaw = yaw;
 		this->pitch = pitch;
 		this->updateCameraVectors();
-	}
-
-	// Constructor with scalar values
-	Camera(GLfloat posX, GLfloat posY, GLfloat posZ, GLfloat upX, GLfloat upY, GLfloat upZ, GLfloat yaw, GLfloat pitch) : front(glm::vec3(0.0f, 0.0f, -1.0f)), movementSpeed(SPEED), mouseSensitivity(SENSITIVTY), zoom(ZOOM)
-	{
-		this->position = glm::vec3(posX, posY, posZ);
-		this->worldUp = glm::vec3(upX, upY, upZ);
-		this->yaw = yaw;
-		this->pitch = pitch;
-		this->updateCameraVectors();
-	}
-
-	// Returns the view matrix calculated using Eular Angles and the LookAt Matrix
+	}	// Returns the view matrix calculated using Eular Angles and the LookAt Matrix
 	glm::mat4 GetViewMatrix()
 	{
 		return glm::lookAt(this->position, this->position + this->front, this->up);
-	}
-
-	// Processes input received from any keyboard-like input system. Accepts input parameter in the form of camera defined ENUM (to abstract it from windowing systems)
-	void ProcessKeyboard(Camera_Movement direction, GLfloat deltaTime)
-	{
-		GLfloat velocity = this->movementSpeed * deltaTime;
-		// Caminar sobre XZ aunque se mire hacia arriba o hacia abajo.
-		const glm::vec3 forward = glm::normalize(glm::vec3(this->front.x, 0.0f, this->front.z));
-
-		if (direction == FORWARD)
-		{
-			this->position += forward * velocity;
-		}
-
-		if (direction == BACKWARD)
-		{
-			this->position -= forward * velocity;
-		}
-
-		if (direction == LEFT)
-		{
-			this->position -= this->right * velocity;
-		}
-
-		if (direction == RIGHT)
-		{
-			this->position += this->right * velocity;
-		}
-	}
-
-	// Processes input received from a mouse input system. Expects the offset value in both the x and y direction.
+	}	// Processes input received from a mouse input system. Expects the offset value in both the x and y direction.
 	void ProcessMouseMovement(GLfloat xOffset, GLfloat yOffset, GLboolean constrainPitch = true)
 	{
 		xOffset *= this->mouseSensitivity;
@@ -140,11 +98,6 @@ public:
 		return this->position;
 	}
 
-	glm::vec3 GetFront()
-	{
-		return this->front;
-	}
-
 private:
 	// Camera Attributes
 	glm::vec3 position;
@@ -166,11 +119,11 @@ private:
 	void updateCameraVectors()
 	{
 		// Calculate the new Front vector
-		glm::vec3 front;
-		front.x = cos(glm::radians(this->yaw)) * cos(glm::radians(this->pitch));
-		front.y = sin(glm::radians(this->pitch));
-		front.z = sin(glm::radians(this->yaw)) * cos(glm::radians(this->pitch));
-		this->front = glm::normalize(front);
+		glm::vec3 direction;
+		direction.x = cos(glm::radians(this->yaw)) * cos(glm::radians(this->pitch));
+		direction.y = sin(glm::radians(this->pitch));
+		direction.z = sin(glm::radians(this->yaw)) * cos(glm::radians(this->pitch));
+		this->front = glm::normalize(direction);
 		// Also re-calculate the Right and Up vector
 		this->right = glm::normalize(glm::cross(this->front, this->worldUp));  // Normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
 		this->up = glm::normalize(glm::cross(this->right, this->front));

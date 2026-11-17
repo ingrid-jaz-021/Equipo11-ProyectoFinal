@@ -25,6 +25,16 @@ struct SpotLight
     float innerCutoff;
     float outerCutoff;
 };
+struct TorchPointLight
+{
+    vec3 position;
+    vec3 diffuse;
+    vec3 specular;
+    float constant;
+    float linear;
+    float quadratic;
+    float range;
+};
 uniform Material material;
 uniform sampler2D texture_diffuse1;
 uniform vec3 lightDirection;
@@ -35,8 +45,12 @@ uniform int pointLightCount;
 uniform vec4 pointLightRegion;
 uniform SpotLight spotLights[32];
 uniform int spotLightCount;
-uniform PointLight torchLights[2];
+uniform bool hasXolotlLight;
+uniform SpotLight xolotlLight;
+uniform PointLight xolotlFill;
+uniform TorchPointLight torchLights[2];
 uniform int torchLightCount;
+uniform vec3 viewPosition;
 uniform PointLight ofrendaLights[6];
 uniform int ofrendaLightCount;
 uniform vec4 ofrendaCandleRegion;
@@ -78,19 +92,46 @@ void main()
     for (int i = 0; i < min(spotLightCount, 32); ++i)
     {
         vec3 toLight = spotLights[i].position - WorldPosition;
-        float distanceToLight = length(toLight);
+        float distanceSquared = dot(toLight,toLight);
         float radius = spotLights[i].range;
-        if (distanceToLight <= 0.0001 || distanceToLight >= radius) continue;
+        if (distanceSquared <= 0.00000001 || distanceSquared >= radius*radius) continue;
+        float distanceToLight = sqrt(distanceSquared);
         vec3 lightDirectionToSurface = -toLight / distanceToLight;
         float coneCos = dot(lightDirectionToSurface, normalize(spotLights[i].direction));
+        if(coneCos<=spotLights[i].outerCutoff)continue; // contribucion exactamente cero
         float cone = smoothstep(spotLights[i].outerCutoff, spotLights[i].innerCutoff, coneCos);
         float surface = max(dot(normal, toLight / distanceToLight), 0.0);
+        if(surface==0.0)continue;
         float normalizedDistance = distanceToLight / radius;
         float attenuation = (1.0 - smoothstep(0.72, 1.0, normalizedDistance)) /
             (1.0 + 1.5 * normalizedDistance + 4.0 * normalizedDistance * normalizedDistance);
         illumination += spotLights[i].color * surface * cone * attenuation;
     }
-    // Luces puntuales de las antorchas (fuego calido que ilumina a los guias y el pasillo)
+    if(hasXolotlLight)
+    {
+        vec3 delta=xolotlLight.position-WorldPosition;float squared=dot(delta,delta);
+        if(squared>0.000001&&squared<xolotlLight.range*xolotlLight.range)
+        {
+            float distanceToLight=sqrt(squared);vec3 direction=delta/distanceToLight;
+            float cone=smoothstep(xolotlLight.outerCutoff,xolotlLight.innerCutoff,
+                dot(-direction,normalize(xolotlLight.direction)));
+            float radius=distanceToLight/xolotlLight.range;
+            float attenuation=(1.0-smoothstep(.72,1.0,radius))/(1.0+1.5*radius+4.0*radius*radius);
+            illumination+=xolotlLight.color*max(dot(normal,direction),0.0)*cone*attenuation;
+        }
+        vec3 fillDelta=xolotlFill.position-WorldPosition;float fillSquared=dot(fillDelta,fillDelta);
+        if(fillSquared>0.000001&&fillSquared<xolotlFill.range*xolotlFill.range)
+        {
+            float d=sqrt(fillSquared),r=d/xolotlFill.range;
+            float attenuation=(1.0-smoothstep(.7,1.0,r))/(1.0+1.5*r+4.0*r*r);
+            illumination+=xolotlFill.color*max(dot(normal,fillDelta/d),0.0)*attenuation;
+        }
+    }
+    // Torches follow the hand/flame in world space. Unlike plaza lights, they
+    // have no fixed region: their finite sphere of influence moves with the NPC.
+    vec3 torchSpecular = vec3(0.0);
+    vec3 toViewer = viewPosition - WorldPosition;
+    vec3 viewDirection = toViewer * inversesqrt(max(dot(toViewer,toViewer),0.00000001));
     for (int i = 0; i < min(torchLightCount, 2); ++i)
     {
         vec3 delta = torchLights[i].position - WorldPosition;
@@ -99,10 +140,17 @@ void main()
         if (distanceSquared >= radius * radius) continue;
         float distanceToLight = sqrt(max(distanceSquared, 0.0001));
         vec3 direction = delta / distanceToLight;
-        float normalizedDistance = distanceToLight / radius;
-        float cutoff = 1.0 - smoothstep(0.60, 1.0, normalizedDistance);
-        float attenuation = cutoff / (1.0 + 1.2 * normalizedDistance + 3.0 * normalizedDistance * normalizedDistance);
-        illumination += torchLights[i].color * max(dot(normal, direction), 0.0) * attenuation;
+        float surface = max(dot(normal, direction),0.0);
+        if (surface <= 0.0) continue;
+        float cutoff = 1.0 - smoothstep(0.70,1.0,distanceToLight/radius);
+        float attenuation = cutoff / max(torchLights[i].constant +
+            torchLights[i].linear * distanceToLight +
+            torchLights[i].quadratic * distanceSquared,0.0001);
+        illumination += torchLights[i].diffuse * surface * attenuation;
+        vec3 halfway = direction + viewDirection;
+        halfway *= inversesqrt(max(dot(halfway,halfway),0.00000001));
+        float highlight = pow(max(dot(normal,halfway),0.0),32.0);
+        torchSpecular += torchLights[i].specular * highlight * attenuation;
     }
     // Luces puntuales de la ofrenda (4 lamparas de cubo naranja + veladoras centrales)
     for (int i = 0; i < min(ofrendaLightCount, 6); ++i)
@@ -148,5 +196,5 @@ void main()
             illumination += fuegoCaminoLights[i].color * max(dot(normal, direction), 0.0) * attenuation;
         }
     }
-    FragColor = vec4(albedo.rgb * illumination + material.emissiveColor, 1.0);
+    FragColor = vec4(albedo.rgb * illumination + torchSpecular + material.emissiveColor, 1.0);
 }

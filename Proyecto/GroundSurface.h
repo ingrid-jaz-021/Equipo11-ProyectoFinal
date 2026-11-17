@@ -12,6 +12,20 @@
 class GroundSurface
 {
 public:
+    struct Footprint { glm::vec2 min,max; };
+    // Source-space footprints of low walkable geometry, for static world walls.
+    // The exact triangles remain authoritative for support and height queries.
+    std::vector<Footprint> FloorFootprints(float ceiling) const
+    {
+        std::vector<Footprint> result;
+        for(const auto& t:triangles)
+        {
+            const auto lo=glm::min(t.a,glm::min(t.b,t.c)),hi=glm::max(t.a,glm::max(t.b,t.c));
+            if(hi.y>ceiling||hi.x-lo.x<.02f||hi.z-lo.z<.02f||(hi.x-lo.x)*(hi.z-lo.z)<.25f)continue;
+            result.push_back({{lo.x,lo.z},{hi.x,hi.z}});
+        }
+        return result;
+    }
     static bool IsRaisedGrass(const std::string& material)
     {
         return material=="Material.008"||material=="Material.009"||material=="Material.010"||

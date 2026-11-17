@@ -404,3 +404,8 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Runtime Wavefront assets are source resources, not compiler object files.
+!/Proyecto/Models/**/*.obj
+# The massive scene is versioned as a lossless ZIP and extracted by MSBuild.
+/Proyecto/Models/EntornoCompleto/EntornoCompleto.obj
