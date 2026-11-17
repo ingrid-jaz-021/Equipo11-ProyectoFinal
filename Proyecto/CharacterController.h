@@ -13,6 +13,7 @@ public:
     glm::vec3 position = glm::vec3(0.0f);
     glm::vec3 velocity = glm::vec3(0.0f);
     float yaw = 0.0f; // Frente del OBJ: +Z.
+    float targetYaw = 0.0f;
     float phase = 0.0f;
     float gait = 0.0f;
     float running = 0.0f;
@@ -34,6 +35,18 @@ public:
         hadInput = false;
         fallVelocity = 0.0f;
         if (animator) animator->Reset();
+    }
+    void SetYaw(float value)
+    {
+        yaw = targetYaw = value;
+    }
+    void TurnLeft90()
+    {
+        targetYaw = std::remainder(targetYaw + 1.57079632679f, 6.28318530718f);
+    }
+    void TurnRight90()
+    {
+        targetYaw = std::remainder(targetYaw - 1.57079632679f, 6.28318530718f);
     }
     void Attach(SkeletalAnimator* rig) { animator = rig; if (!rig) throw std::runtime_error("Personaje sin esqueleto."); rig->Reset(); }
     void SetFrozen(bool value) { frozen = value; }
