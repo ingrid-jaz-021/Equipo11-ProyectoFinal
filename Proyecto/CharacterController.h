@@ -13,6 +13,7 @@ public:
     glm::vec3 position = glm::vec3(0.0f);
     glm::vec3 velocity = glm::vec3(0.0f);
     float yaw = 0.0f; // Frente del OBJ: +Z.
+    float targetYaw = 0.0f;
     float phase = 0.0f;
     float gait = 0.0f;
     float running = 0.0f;
@@ -30,9 +31,29 @@ public:
     {
         position = glm::vec3(0.0f);
         velocity = glm::vec3(0.0f);
-        yaw = phase = gait = running = 0.0f;
+        yaw = targetYaw = phase = gait = running = 0.0f;
         fallVelocity = 0.0f;
         if (animator) animator->Reset();
+    }
+    void SetYaw(float value)
+    {
+        yaw = targetYaw = value;
+    }
+    void Turn(float deltaYaw)
+    {
+        targetYaw = std::remainder(targetYaw + deltaYaw, 6.28318530718f);
+    }
+    void TurnLeft90()
+    {
+        Turn(1.57079632679f);
+    }
+    void TurnRight90()
+    {
+        Turn(-1.57079632679f);
+    }
+    void Turn180()
+    {
+        Turn(3.14159265359f);
     }
     void Attach(SkeletalAnimator* rig) { animator = rig; if (!rig) throw std::runtime_error("Personaje sin esqueleto."); rig->Reset(); }
     void SetFrozen(bool value) { frozen = value; }
@@ -42,22 +63,20 @@ public:
     {
         if (frozen) return;
         const bool moving = glm::dot(input, input) > 0.001f;
-        cameraForward.y = 0.0f;
-        const glm::vec3 movementForward = glm::dot(cameraForward,cameraForward)>.001f
-            ?glm::normalize(cameraForward):Forward();
-        // The entire model follows the independent camera heading, including
-        // while idle, reversing or strafing. Keyboard never changes camera yaw.
-        const float targetYaw=std::atan2(movementForward.x,movementForward.z);
-        yaw=std::remainder(yaw+std::remainder(targetYaw-yaw,6.28318530718f)*
-            (1-std::exp(-12.0f*dt)),6.28318530718f);
-        if(std::abs(std::remainder(targetYaw-yaw,6.28318530718f))<.0001f)yaw=targetYaw;
+
+        // Giro suave y continuo hacia targetYaw (por ejemplo giros de 90 grados con flechas)
+        yaw = std::remainder(yaw + std::remainder(targetYaw - yaw, 6.28318530718f) *
+            (1.0f - std::exp(-16.0f * dt)), 6.28318530718f);
+        if (std::abs(std::remainder(targetYaw - yaw, 6.28318530718f)) < 0.0001f) yaw = targetYaw;
+
         glm::vec3 desired(0.0f);
         if (moving)
         {
-            // Recompute from camera yaw every step, even with a key held.
-            input = glm::normalize(input);
-            const glm::vec3 right = glm::cross(movementForward, glm::vec3(0, 1, 0));
-            desired = movementForward * input.y + right * input.x;
+            const glm::vec3 fwd = Forward();
+            const glm::vec3 right = glm::cross(glm::vec3(0, 1, 0), fwd);
+            desired = fwd * input.y + right * input.x;
+            if (glm::length(desired) > 0.0001f)
+                desired = glm::normalize(desired);
         }
         running = glm::mix(running, sprint && moving ? 1.0f : 0.0f, 1.0f - std::exp(-4.5f * dt));
         const float speed = worldScale * glm::mix(MovementSettings::WalkSpeed, MovementSettings::RunSpeed, running);
@@ -137,9 +156,16 @@ public:
     }
     void Scroll(float amount) { distance = glm::clamp(distance - amount * 0.4f, 3.8f, 12.0f); }
     void Reset() { pitch = 18.0f; yaw = 0.0f; distance = MovementSettings::FollowDistance; initialized = false; }
+    void FollowYaw(float targetYaw, float dt, float speed = 16.0f)
+    {
+        yaw = std::remainder(yaw + std::remainder(targetYaw - yaw, 6.28318530718f) *
+            (1.0f - std::exp(-speed * dt)), 6.28318530718f);
+        if (std::abs(std::remainder(targetYaw - yaw, 6.28318530718f)) < 0.0001f) yaw = targetYaw;
+    }
     void Update(const CharacterController& player, float dt, float scale, bool snap = false)
     {
-        UpdateAnchor(player.position,player.height,dt,scale,0,snap);
+        if (snap) yaw = player.targetYaw;
+        UpdateAnchor(player.position, player.height, dt, scale, 0, snap);
     }
     void UpdateAnchor(const glm::vec3& anchor,float height,float dt,float scale,float minimumDistance,bool snap=false)
     {

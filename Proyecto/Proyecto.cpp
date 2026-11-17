@@ -119,7 +119,14 @@ void MouseCallback(GLFWwindow* window, double x, double y)
     if (firstMouse) { lastX = x; lastY = y; firstMouse = false; }
     const float dx = static_cast<float>(x - lastX), dy = static_cast<float>(lastY - y);
     if (cameraMode == CameraMode::Free) freeCamera.ProcessMouseMovement(dx, dy);
-    else followCamera.Mouse(dx, dy);
+    else
+    {
+        followCamera.Mouse(dx, dy);
+        if (!activeBoat || !activeBoat->IsNavigating())
+        {
+            player.SetYaw(followCamera.yaw);
+        }
+    }
     lastX = x; lastY = y;
 }
 void KeyCallback(GLFWwindow* window, int key, int, int action, int)
@@ -161,6 +168,11 @@ void KeyCallback(GLFWwindow* window, int key, int, int action, int)
         if (cameraMode == CameraMode::Free) freeCamera = Camera(glm::vec3(30,30,-60), glm::vec3(0,1,0),115,-12);
         else {ResetScene();UpdateWindowTitle(window);}
     }
+    // Flecha Abajo en tercera persona: voltear al personaje 180 grados
+    if (key == GLFW_KEY_DOWN && cameraMode == CameraMode::ThirdPerson && (!activeBoat || !activeBoat->IsNavigating()))
+    {
+        player.Turn180();
+    }
 }
 void ApplyMovement(glm::vec2 input, bool sprint, float vertical, float dt,bool animate=true)
 {
@@ -176,7 +188,21 @@ void ApplyMovement(glm::vec2 input, bool sprint, float vertical, float dt,bool a
         return;
     }
     if(activeBoat&&activeBoat->IsNavigating())activeBoat->Update(input,sprint,dt);
-    else player.Update(input, followCamera.Forward(), sprint, dt, ENVIRONMENT_SCALE,animate);
+    else
+    {
+        // Giro suave y progresivo con flechas izquierda / derecha; la camara acompana el giro
+        if (std::abs(input.x) > 0.001f)
+        {
+            player.Turn(input.x * MovementSettings::TurnSpeed * dt);
+            followCamera.FollowYaw(player.targetYaw, dt);
+        }
+        // Al caminar (flecha arriba o mantener flecha abajo), la camara se coloca suavemente a su espalda
+        if (input.y > 0.001f)
+        {
+            followCamera.FollowYaw(player.targetYaw, dt, 8.0f);
+        }
+        player.Update(glm::vec2(0.0f, input.y), followCamera.Forward(), sprint, dt, ENVIRONMENT_SCALE, animate);
+    }
 }
 void SimulateFrame(glm::vec2 input,bool sprint,float vertical,float dt,const GroundSurface* ground)
 {
@@ -206,11 +232,18 @@ void SimulateFrame(glm::vec2 input,bool sprint,float vertical,float dt,const Gro
 template<typename Down>
 glm::vec2 ReadMovementKeys(const Down& down,bool flying,bool sailing)
 {
-    if(flying)return {static_cast<float>(down(GLFW_KEY_D)-down(GLFW_KEY_A)),static_cast<float>(down(GLFW_KEY_W)-down(GLFW_KEY_S))};
-    // Arrows are the sole walking controls. Boat retains WASD and also accepts
-    // arrows; combining both layouts never doubles a component.
-    return {static_cast<float>((down(GLFW_KEY_RIGHT)||(sailing&&down(GLFW_KEY_D)))-(down(GLFW_KEY_LEFT)||(sailing&&down(GLFW_KEY_A)))),
-        static_cast<float>((down(GLFW_KEY_UP)||(sailing&&down(GLFW_KEY_W)))-(down(GLFW_KEY_DOWN)||(sailing&&down(GLFW_KEY_S))))};
+    if (flying)
+        return { static_cast<float>(down(GLFW_KEY_D) - down(GLFW_KEY_A)),
+                 static_cast<float>(down(GLFW_KEY_W) - down(GLFW_KEY_S)) };
+    if (sailing)
+        return { static_cast<float>((down(GLFW_KEY_RIGHT) || down(GLFW_KEY_D)) - (down(GLFW_KEY_LEFT) || down(GLFW_KEY_A))),
+                 static_cast<float>((down(GLFW_KEY_UP) || down(GLFW_KEY_W)) - (down(GLFW_KEY_DOWN) || down(GLFW_KEY_S))) };
+    // A pie:
+    // Flecha Arriba: avanzar (la camara gira suavemente a la espalda al caminar).
+    // Flecha Abajo: voltear al personaje 180 grados en su lugar (en KeyCallback).
+    // Flechas Izquierda/Derecha: girar al personaje suave y poco a poco (+izq, -der).
+    return { static_cast<float>(down(GLFW_KEY_LEFT) - down(GLFW_KEY_RIGHT)),
+             static_cast<float>(down(GLFW_KEY_UP) ? 1 : 0) };
 }
 void DoMovement(GLFWwindow* window, float dt,const GroundSurface* ground)
 {
@@ -225,7 +258,9 @@ void PrintControls()
 {
     // Audited against KeyCallback, ReadMovementKeys, DoMovement and mouse/scroll callbacks.
     std::cout << "\n================ CONTROLES ACTIVOS ================\n"
-        << "A PIE     Flechas: avanzar, retroceder y desplazarse a los lados segun la vista.\n"
+        << "A PIE     Flecha Arriba: avanzar (la camara gira suavemente a la espalda).\n"
+        << "          Flecha Abajo: voltear al personaje 180 grados en su lugar.\n"
+        << "          Flecha Izquierda/Derecha: girar suavemente al personaje acompanado por la camara.\n"
         << "          Shift izquierdo: correr.\n"
         << "VISTA     Raton/touchpad capturado: orbitar en tercera persona; mirar en libre.\n"
         << "          Rueda: distancia en tercera persona; campo de vision en libre.\n"
@@ -353,33 +388,132 @@ void ValidateControls()
     for(int i=0;i<120;++i) b.Update({1,1},{1,0,0},true,1.0f/60,ENVIRONMENT_SCALE);
     require(glm::length(b.position-position)==0&&glm::length(b.velocity-velocity)==0&&
         b.phase==phase&&b.gait==gait,"El personaje cambia mientras la camara esta libre.");
-    // Real key mapping: WASD is exclusive to free camera / boat, and arrows
-    // translate the girl relative to the current yaw without rotating the view.
-    for(int key:{GLFW_KEY_UP,GLFW_KEY_DOWN,GLFW_KEY_LEFT,GLFW_KEY_RIGHT})
+    // Mapeo de teclas:
+    // Flecha Arriba: avanzar.
+    // Flechas Izquierda/Derecha: girar suavemente (+1 izquierda, -1 derecha).
+    for(int key:{GLFW_KEY_UP,GLFW_KEY_LEFT,GLFW_KEY_RIGHT})
     {
         const auto held=[key](int value){return value==key;};
         const auto input=ReadMovementKeys(held,false,false);
-        require(glm::length(input)==1,"Flecha sin desplazamiento.");
+        require(glm::length(input)==1,"Flecha sin entrada de movimiento o giro.");
         require(ReadMovementKeys(held,true,false)==glm::vec2(0),"Las flechas alteran la camara libre.");
+    }
+    // Flecha Abajo solo voltea al personaje en KeyCallback; nunca genera traslacion (la unica tecla de avance es Arriba)
+    {
+        const auto heldDown=[](int value){return value==GLFW_KEY_DOWN;};
+        require(ReadMovementKeys(heldDown,false,false)==glm::vec2(0),"Flecha Abajo no debe avanzar; solo voltea al personaje en su lugar.");
+        require(ReadMovementKeys(heldDown,true,false)==glm::vec2(0),"Flecha Abajo altera la camara libre.");
     }
     const auto wasd=[](int key){return key==GLFW_KEY_W;};
     require(ReadMovementKeys(wasd,false,false)==glm::vec2(0)&&ReadMovementKeys(wasd,true,false)==glm::vec2(0,1),"WASD no respeta el modo de camara.");
-    for(int angle=0;angle<4;++angle)for(glm::vec2 input:{glm::vec2(0,1),{0,-1},{-1,0},{1,0}})
+
+    // Validar que con flecha abajo el personaje se voltea (giro de 180 grados)
+    CharacterController flipTest;
+    flipTest.Reset();
+    require(flipTest.yaw == 0.0f, "Yaw inicial incorrecto.");
+
+    // Voltearse: giro de 180 grados (+pi)
+    flipTest.Turn180();
+    require(std::abs(std::remainder(flipTest.targetYaw - 3.14159265359f, 6.28318530718f)) < 0.0001f, "TargetYaw no es 180 grados al voltearse.");
+    const float dt60 = 1.0f / 60.0f;
+    for(int i = 0; i < 45; ++i) flipTest.Update(glm::vec2(0), glm::vec3(0,0,1), false, dt60, ENVIRONMENT_SCALE);
+    require(std::abs(std::remainder(flipTest.yaw - 3.14159265359f, 6.28318530718f)) < 0.01f, "Yaw no alcanza 180 grados tras voltearse.");
+
+    // Voltearse de nuevo regresa a la orientacion original
+    flipTest.Turn180();
+    require(std::abs(std::remainder(flipTest.targetYaw, 6.28318530718f)) < 0.0001f, "TargetYaw no regresa a 0 al voltearse por segunda vez.");
+    for(int i = 0; i < 45; ++i) flipTest.Update(glm::vec2(0), glm::vec3(0,0,1), false, dt60, ENVIRONMENT_SCALE);
+    require(std::abs(std::remainder(flipTest.yaw, 6.28318530718f)) < 0.001f, "Yaw no regresa a 0 al voltearse por segunda vez.");
+
+    // Al pulsar flecha abajo, la camara permanece quieta mirando de frente al personaje
+    // Al caminar (mantener flecha abajo o presionar flecha arriba), la camara se coloca suavemente a su espalda
     {
-        FollowCamera camera;CharacterController test;
-        camera.yaw=angle*1.57079632679f;const auto forward=camera.Forward();
-        const auto expected=forward*input.y+glm::cross(forward,glm::vec3(0,1,0))*input.x;
-        for(int i=0;i<120;++i){test.Update(input,forward,false,1.0f/60,ENVIRONMENT_SCALE);camera.Update(test,1.0f/60,ENVIRONMENT_SCALE);}
-        require(glm::dot(glm::normalize(test.position),expected)>.9999f,"Flechas fuera de la base de la camara.");
-        require(glm::dot(test.Forward(),forward)>.9999f,"El cuerpo no mira hacia el yaw de la camara al hacer strafe/retroceder.");
-        require(std::abs(std::remainder(camera.yaw-angle*1.57079632679f,6.28318530718f))<.00001f,"El teclado rota la camara.");
+        FollowCamera flipCam; CharacterController flipMover;
+        const float initialCamYaw = flipCam.yaw;
+        flipMover.Turn180();
+        // Durante el giro en el lugar, la camara no se voltea
+        for(int i = 0; i < 45; ++i) { flipMover.Update(glm::vec2(0), glm::vec3(0,0,1), false, dt60, ENVIRONMENT_SCALE); flipCam.Update(flipMover, dt60, ENVIRONMENT_SCALE); }
+        const glm::vec3 backFwd = flipMover.Forward();
+        require(backFwd.z < -0.999f, "El frente del personaje tras voltearse no es hacia atras (-Z).");
+        require(std::abs(std::remainder(flipCam.yaw - initialCamYaw, 6.28318530718f)) < 0.0001f, "La camara no debe voltearse al girar en el lugar con flecha abajo.");
+
+        // Al comenzar a avanzar (mantener presionado o flecha arriba), la camara se coloca a la espalda
+        for(int i = 0; i < 60; ++i)
+        {
+            flipCam.FollowYaw(flipMover.targetYaw, dt60, 8.0f);
+            flipMover.Update(glm::vec2(0, 1), backFwd, false, dt60, ENVIRONMENT_SCALE);
+            flipCam.Update(flipMover, dt60, ENVIRONMENT_SCALE);
+        }
+        require(flipMover.position.z < -ENVIRONMENT_SCALE * 0.5f, "El personaje no avanza en la direccion volteada.");
+        require(std::abs(std::remainder(flipCam.yaw - flipMover.targetYaw, 6.28318530718f)) < 0.01f, "La camara no se coloco a la espalda al caminar.");
     }
-    CharacterController heldTurn;
-    for(int i=0;i<60;++i)heldTurn.Update({0,1},{0,0,1},false,1.0f/60,ENVIRONMENT_SCALE);
-    for(int i=0;i<60;++i)heldTurn.Update({0,1},{1,0,0},false,1.0f/60,ENVIRONMENT_SCALE);
-    require(heldTurn.position.x>ENVIRONMENT_SCALE&&heldTurn.velocity.x>10&&std::abs(heldTurn.velocity.z)<.01f,"La direccion queda bloqueada al mantener la flecha y mover el mouse.");
+
+    // Validar giro suave y progresivo (poco a poco) a la izquierda y derecha acompanado por la camara
+    CharacterController turnTest;
+    turnTest.Reset();
+    require(turnTest.yaw == 0.0f, "Yaw inicial incorrecto.");
+
+    // Un frame a 60 FPS con Turn(TurnSpeed * dt) solo gira una fraccion pequenia (no salta 90 grados)
+    turnTest.Turn(MovementSettings::TurnSpeed * dt60);
+    require(std::abs(turnTest.targetYaw - MovementSettings::TurnSpeed * dt60) < 0.0001f, "El giro no es progresivo.");
+    require(turnTest.targetYaw < 0.1f, "El giro salto bruscamente en lugar de ser poco a poco.");
+
+    // Sostener giro a la izquierda durante 1 segundo (60 frames) avanza suavemente
+    turnTest.Reset();
+    for(int i = 0; i < 60; ++i)
+    {
+        turnTest.Turn(MovementSettings::TurnSpeed * dt60);
+        turnTest.Update(glm::vec2(0), glm::vec3(0,0,1), false, dt60, ENVIRONMENT_SCALE);
+    }
+    require(std::abs(turnTest.targetYaw - MovementSettings::TurnSpeed * 1.0f) < 0.001f, "TargetYaw incorrecto tras girar 1 segundo.");
+    require(std::abs(turnTest.yaw - turnTest.targetYaw) < 0.20f, "Yaw no sigue el giro suavemente.");
+    for(int i = 0; i < 30; ++i) turnTest.Update(glm::vec2(0), glm::vec3(0,0,1), false, dt60, ENVIRONMENT_SCALE);
+    require(std::abs(turnTest.yaw - turnTest.targetYaw) < 0.001f, "Yaw no alcanza targetYaw al detenerse.");
+
+    // Sostener giro a la derecha durante 1 segundo
+    for(int i = 0; i < 60; ++i)
+    {
+        turnTest.Turn(-MovementSettings::TurnSpeed * dt60);
+        turnTest.Update(glm::vec2(0), glm::vec3(0,0,1), false, dt60, ENVIRONMENT_SCALE);
+    }
+    require(std::abs(turnTest.targetYaw) < 0.001f, "TargetYaw no regresa al origen tras girar en sentido contrario.");
+    for(int i = 0; i < 30; ++i) turnTest.Update(glm::vec2(0), glm::vec3(0,0,1), false, dt60, ENVIRONMENT_SCALE);
+    require(std::abs(turnTest.yaw) < 0.001f, "Yaw no regresa al origen al detenerse.");
+
+    // Avance en la orientacion actual tras girar suavemente (la camara acompana el giro con flechas izq/der)
+    {
+        FollowCamera camera; CharacterController mover;
+        // Girar suavemente 45 grados (pi/4)
+        const float targetAngle = 0.78539816339f;
+        const int frames = static_cast<int>(std::round(targetAngle / (MovementSettings::TurnSpeed * dt60)));
+        for(int i = 0; i < frames; ++i)
+        {
+            mover.Turn(MovementSettings::TurnSpeed * dt60);
+            mover.Update(glm::vec2(0), glm::vec3(0,0,1), false, dt60, ENVIRONMENT_SCALE);
+            camera.FollowYaw(mover.targetYaw, dt60);
+            camera.Update(mover, dt60, ENVIRONMENT_SCALE);
+        }
+        for(int i = 0; i < 30; ++i)
+        {
+            mover.Update(glm::vec2(0), glm::vec3(0,0,1), false, dt60, ENVIRONMENT_SCALE);
+            camera.FollowYaw(mover.targetYaw, dt60);
+            camera.Update(mover, dt60, ENVIRONMENT_SCALE);
+        }
+        require(std::abs(std::remainder(camera.yaw - mover.targetYaw, 6.28318530718f)) < 0.01f, "La camara debe acompanar el giro con flechas izq/der.");
+        const glm::vec3 fwd = mover.Forward();
+        for(int i = 0; i < 60; ++i)
+        {
+            mover.Update(glm::vec2(0, 1), fwd, false, dt60, ENVIRONMENT_SCALE);
+            camera.FollowYaw(mover.targetYaw, dt60, 8.0f);
+            camera.Update(mover, dt60, ENVIRONMENT_SCALE);
+        }
+        require(glm::dot(glm::normalize(mover.position), fwd) > 0.999f, "El avance no coincide con la orientacion tras girar suavemente.");
+        require(std::abs(std::remainder(camera.yaw - mover.targetYaw, 6.28318530718f)) < 0.01f, "La camara debe mantenerse a la espalda al caminar.");
+    }
+
     FollowCamera orbit;CharacterController standing;const auto still=standing.position;
     orbit.Mouse(1200,0); // full 180-degree turn without any movement key
+    standing.SetYaw(orbit.yaw);
     for(int i=0;i<120;++i)standing.Update({0,0},orbit.Forward(),false,1.0f/60,ENVIRONMENT_SCALE);
     require(standing.position==still&&glm::dot(standing.Forward(),orbit.Forward())>.9999f,"La nina no gira entera al mover el mouse estando quieta.");
     orbit.Mouse(0,10000);orbit.Update(standing,0,ENVIRONMENT_SCALE,true);
@@ -395,7 +529,7 @@ void ValidateControls()
         !BoundsVisible(frustum,{2,-.5f,-.5f},{3,.5f,.5f})&&
         !TransformedBoundsVisible(frustum,glm::vec3(-.5f),glm::vec3(.5f),glm::translate(glm::mat4(1),glm::vec3(5,0,0))),
         "El frustum descarta objetos visibles o conserva objetos fuera del campo.");
-    std::cout<<"Controles OK: flechas en 4 orientaciones, strafe, cuerpo/camara independientes del teclado, giro al mantener tecla, FPS y suelo."<<std::endl;
+    std::cout<<"Controles OK: flechas con avance, giro con camara y flecha abajo voltea en el lugar, mouse 360, FPS y suelo."<<std::endl;
 }
 void ValidateMouseOrbit(GLFWwindow* window)
 {
