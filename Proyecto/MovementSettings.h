@@ -4,6 +4,7 @@ namespace MovementSettings
     constexpr float CharacterHeight = 2.8f; // Antes: 1.35; unidades del escenario exportado.
     constexpr float WalkSpeed = 5.2f;
     constexpr float RunSpeed = 11.5f;
+    constexpr float TurnSpeed = 2.0f; // Giro suave y progresivo en radianes por segundo (~115 deg/s).
     constexpr float FlySpeed = 18.0f;
     constexpr float FlyFastSpeed = 45.0f;
     constexpr float FollowDistance = 8.0f; // Encuadrar a la nina y al acompanante.

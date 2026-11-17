@@ -41,7 +41,7 @@ public:
         }
         glm::vec3 landing,pet;float heading;
         if(!FindLanding(landing,pet,heading))return Interaction::NoLanding;
-        navigating=false;Anchor();girl.SetFrozen(false);girl.Reset();girl.position=landing;girl.yaw=heading;
+        navigating=false;Anchor();girl.SetFrozen(false);girl.Reset();girl.position=landing;girl.SetYaw(heading);
         dog.ResetBeside(girl,scale);dog.position=pet;
         return Interaction::Disembarked;
     }
@@ -57,7 +57,7 @@ public:
     {
         if(!navigating)return;
         const auto pose=Pose();
-        girl.position=glm::vec3(pose*glm::vec4(glm::vec3(.75f,.205f,-.10f)*scale,1));girl.yaw=yaw;
+        girl.position=glm::vec3(pose*glm::vec4(glm::vec3(.75f,.205f,-.10f)*scale,1));girl.SetYaw(yaw);
         dog.position=glm::vec3(pose*glm::vec4(glm::vec3(-.95f,.205f,-.65f)*scale,1));dog.yaw=yaw;
         // Solo cambia su transformacion de pasajeros; las matrices de huesos permanecen fijas.
     }
@@ -117,7 +117,7 @@ public:
             const float z=(area.dockMin.z+area.dockMax.z)*.5f,start=area.dockMin.x-12;
             float y;
             if(!ground.SampleCharacter(start,z,area.min.y+4.5f,y))throw std::runtime_error("No existe el piso de acceso al muelle.");
-            girl.position=World({start,y,z});dog.ResetBeside(girl,scale);
+            girl.position=World({start,y,z});girl.SetYaw(HalfPi);dog.ResetBeside(girl,scale);
             int rejected=0,frames=0;
             while(Source(girl.position).x<area.dockMax.x-1.4f&&frames++<fps*25)
             {
