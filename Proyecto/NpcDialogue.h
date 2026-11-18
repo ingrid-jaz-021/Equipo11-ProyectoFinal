@@ -54,6 +54,18 @@ public:
         const float dy = std::abs(pos.y - xolotlPos.y);
         return (dx * dx + dz * dz <= 420.0f * 420.0f) && (dy <= 150.0f);
     }
+    static bool IsAlmasNearby(const glm::vec3& pos, const glm::vec3& row0Target, const glm::vec3& row1Target, float radius = 250.0f)
+    {
+        // Detecta aproximacion a cualquiera de las dos filas de almas que dan vueltas frente a la piramide
+        for (const auto& target : { row0Target, row1Target })
+        {
+            const float dx = pos.x - target.x;
+            const float dz = pos.z - target.z;
+            const float dy = std::abs(pos.y - target.y);
+            if (dx * dx + dz * dz <= radius * radius && dy <= 120.0f) return true;
+        }
+        return false;
+    }
     void Draw(bool visible,int width,int height) const
     {
         if(visible)DrawPanel(0,width,height);
