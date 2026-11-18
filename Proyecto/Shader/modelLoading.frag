@@ -58,6 +58,8 @@ uniform vec3 ofrendaCandleColor;
 uniform PointLight fuegoCaminoLights[24];
 uniform int fuegoCaminoLightCount;
 uniform vec4 fuegoCaminoRegion;
+uniform SpotLight entradaSpotLights[2];
+uniform int entradaSpotLightCount;
 void main()
 {
     vec4 albedo = vec4(material.diffuseColor, material.opacity);
@@ -106,6 +108,26 @@ void main()
         float attenuation = (1.0 - smoothstep(0.72, 1.0, normalizedDistance)) /
             (1.0 + 1.5 * normalizedDistance + 4.0 * normalizedDistance * normalizedDistance);
         illumination += spotLights[i].color * surface * cone * attenuation;
+    }
+    // Reflectores de la entrada (iluminan el letrero de bienvenida, ajolote y arco)
+    for (int i = 0; i < min(entradaSpotLightCount, 2); ++i)
+    {
+        vec3 toLight = entradaSpotLights[i].position - WorldPosition;
+        float distanceSquared = dot(toLight, toLight);
+        float radius = entradaSpotLights[i].range;
+        if (distanceSquared <= 0.00000001 || distanceSquared >= radius * radius) continue;
+        float distanceToLight = sqrt(distanceSquared);
+        vec3 lightDirectionToSurface = -toLight / distanceToLight;
+        float coneCos = dot(lightDirectionToSurface, normalize(entradaSpotLights[i].direction));
+        if (coneCos <= entradaSpotLights[i].outerCutoff) continue;
+        float cone = smoothstep(entradaSpotLights[i].outerCutoff, entradaSpotLights[i].innerCutoff, coneCos);
+        float NdotL = dot(normal, toLight / distanceToLight);
+        float surface = max((NdotL + 0.15) / 1.15, 0.0);
+        if (surface <= 0.0) continue;
+        float normalizedDistance = distanceToLight / radius;
+        float attenuation = (1.0 - smoothstep(0.72, 1.0, normalizedDistance)) /
+            (1.0 + 1.2 * normalizedDistance + 2.5 * normalizedDistance * normalizedDistance);
+        illumination += entradaSpotLights[i].color * surface * cone * attenuation;
     }
     if(hasXolotlLight)
     {

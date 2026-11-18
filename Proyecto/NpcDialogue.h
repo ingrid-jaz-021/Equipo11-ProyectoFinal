@@ -65,6 +65,14 @@ public:
         }
         return false;
     }
+    static bool IsPiramideNearby(const glm::vec3& pos, const glm::vec3& pyramidMin, const glm::vec3& pyramidMax, float radius = 120.0f)
+    {
+        // Proximidad a Piramide2 calibrada a ~12 unidades fuente ("12 cm")
+        const float dx = (std::max)(0.0f, (std::max)(pyramidMin.x - pos.x, pos.x - pyramidMax.x));
+        const float dz = (std::max)(0.0f, (std::max)(pyramidMin.z - pos.z, pos.z - pyramidMax.z));
+        const float dy = (std::max)(0.0f, (std::max)(pyramidMin.y - pos.y, pos.y - pyramidMax.y));
+        return (dx * dx + dz * dz <= radius * radius) && (dy <= 150.0f);
+    }
     void Draw(bool visible,int width,int height) const
     {
         if(visible)DrawPanel(0,width,height);
