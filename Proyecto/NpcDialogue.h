@@ -45,6 +45,15 @@ public:
         const float dz = pos.z - (-812.0f);
         return (std::abs(dx) <= 65.0f) && (std::abs(dz) <= 75.0f);
     }
+    static bool IsXolotlNearby(const glm::vec3& pos, const glm::vec3& xolotlPos)
+    {
+        // Escenario de la laguna donde danza el Dios Xolotl:
+        // Detecta la aproximacion tanto en balsa como a pie sobre la tarima
+        const float dx = pos.x - xolotlPos.x;
+        const float dz = pos.z - xolotlPos.z;
+        const float dy = std::abs(pos.y - xolotlPos.y);
+        return (dx * dx + dz * dz <= 420.0f * 420.0f) && (dy <= 150.0f);
+    }
     void Draw(bool visible,int width,int height) const
     {
         if(visible)DrawPanel(0,width,height);

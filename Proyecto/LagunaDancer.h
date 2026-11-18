@@ -87,6 +87,7 @@ public:
     }
 
     bool Configured() const { return configured; }
+    const glm::vec3& GetPosition() const { return position; }
     void UploadLighting(const Shader& shader,const FrustumPlanes* planes=nullptr) const
     {
         shader.Use();const bool visible=configured&&LightSphereVisible(planes,lightPosition,lightRange);
