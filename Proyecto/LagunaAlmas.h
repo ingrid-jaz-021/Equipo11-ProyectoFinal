@@ -194,6 +194,32 @@ public:
     }
 
     bool Configured() const { return configured; }
+    bool IsNearby(const glm::vec3& pos, float maxDistance = 120.0f) const
+    {
+        if (!configured) return false;
+        const float maxDistSq = maxDistance * maxDistance;
+        for (size_t row = 0; row < RowCount; ++row)
+        {
+            // Proximidad a la fila o a cualquiera de las almas que dan vueltas (~12 unidades fuente / "12 cm")
+            const auto target = ValidationTarget(row);
+            const float dtx = pos.x - target.x;
+            const float dtz = pos.z - target.z;
+            const float dty = std::abs(pos.y - target.y);
+            if (dtx * dtx + dtz * dtz <= maxDistSq && dty <= 100.0f)
+                return true;
+
+            for (size_t i = 0; i < Count; ++i)
+            {
+                const auto p = Position(i, row);
+                const float dxi = pos.x - p.x;
+                const float dzi = pos.z - p.z;
+                const float dy = std::abs(pos.y - p.y);
+                if (dxi * dxi + dzi * dzi <= maxDistSq && dy <= 100.0f)
+                    return true;
+            }
+        }
+        return false;
+    }
 
 private:
     struct Route
