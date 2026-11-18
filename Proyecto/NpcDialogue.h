@@ -45,24 +45,23 @@ public:
         const float dz = pos.z - (-812.0f);
         return (std::abs(dx) <= 65.0f) && (std::abs(dz) <= 75.0f);
     }
-    static bool IsXolotlNearby(const glm::vec3& pos, const glm::vec3& xolotlPos)
+    static bool IsXolotlNearby(const glm::vec3& pos, const glm::vec3& xolotlPos, float radius = 120.0f)
     {
-        // Escenario de la laguna donde danza el Dios Xolotl:
-        // Detecta la aproximacion tanto en balsa como a pie sobre la tarima
+        // Proximidad al Dios Xolotl calibrada a ~12 unidades fuente ("12 cm")
         const float dx = pos.x - xolotlPos.x;
         const float dz = pos.z - xolotlPos.z;
         const float dy = std::abs(pos.y - xolotlPos.y);
-        return (dx * dx + dz * dz <= 420.0f * 420.0f) && (dy <= 150.0f);
+        return (dx * dx + dz * dz <= radius * radius) && (dy <= 100.0f);
     }
-    static bool IsAlmasNearby(const glm::vec3& pos, const glm::vec3& row0Target, const glm::vec3& row1Target, float radius = 250.0f)
+    static bool IsAlmasNearby(const glm::vec3& pos, const glm::vec3& row0Target, const glm::vec3& row1Target, float radius = 120.0f)
     {
-        // Detecta aproximacion a cualquiera de las dos filas de almas que dan vueltas frente a la piramide
+        // Proximidad a las almas calibrada a ~12 unidades fuente ("12 cm")
         for (const auto& target : { row0Target, row1Target })
         {
             const float dx = pos.x - target.x;
             const float dz = pos.z - target.z;
             const float dy = std::abs(pos.y - target.y);
-            if (dx * dx + dz * dz <= radius * radius && dy <= 120.0f) return true;
+            if (dx * dx + dz * dz <= radius * radius && dy <= 100.0f) return true;
         }
         return false;
     }

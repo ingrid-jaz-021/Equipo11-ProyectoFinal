@@ -1204,7 +1204,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
                 SetValidationCamera(lagunaDancer.ValidationEye(*lagunaDancerModel),
                     lagunaDancer.ValidationTarget(*lagunaDancerModel));
                 savedXolotlPosition = player.position;
-                player.position = lagunaDancer.GetPosition() + glm::vec3(35.0f, 0.0f, 85.0f);
+                player.position = lagunaDancer.GetPosition() + glm::vec3(12.0f, 0.0f, 15.0f);
                 xolotlApproachTest = true;
             }
             if(frame==390 || frame==775)
@@ -1213,7 +1213,7 @@ void RunScene(GLFWwindow* window, bool validate, bool characterOnly, const std::
                 const size_t row = frame == 390 ? 0 : 1;
                 SetValidationCamera(lagunaAlmas.ValidationEye(row), lagunaAlmas.ValidationTarget(row));
                 savedAlmasPosition = player.position;
-                player.position = lagunaAlmas.ValidationTarget(row) + glm::vec3(0.0f, 0.0f, -25.0f);
+                player.position = lagunaAlmas.Position(0, row) + glm::vec3(5.0f, 0.0f, 5.0f);
                 almasApproachTest = true;
             }
             if (frame == 150)
